@@ -47,6 +47,8 @@ def get_rows(source_id: int, user: CurrentUser, db: DbDep,
 
     # Permission-scoped cache (task book §14): key includes user/workspace/
     # role/dataset scope + file_ref_id (source & refresh version) + params.
+    from fastapi.responses import JSONResponse
+
     from ..cache import cache_key, get_result_cache
     from ..deps import authorized_datasets
 
@@ -56,7 +58,7 @@ def get_rows(source_id: int, user: CurrentUser, db: DbDep,
     cache = get_result_cache()
     cached, hit = cache.get(key)
     if hit:
-        return cached
+        return JSONResponse(content=cached, headers={"X-Cache": "HIT"})
 
     from cloud_adapters.files.local_volume import LocalVolumeFileStore
 
@@ -73,4 +75,4 @@ def get_rows(source_id: int, user: CurrentUser, db: DbDep,
         "size": size,
     }
     cache.put(key, result)
-    return result
+    return JSONResponse(content=result, headers={"X-Cache": "MISS"})
