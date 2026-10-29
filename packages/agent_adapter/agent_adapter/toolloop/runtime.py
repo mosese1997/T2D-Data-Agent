@@ -199,7 +199,7 @@ class ToolLoopRuntime(AgentRuntime):
         except ToolError as exc:
             latency_ms = int((time.monotonic() - started) * 1000)
             if session.trace_hook:
-                session.trace_hook(tool.name, args, None, latency_ms, "error")
+                session.trace_hook(tool.name, args, exc.as_payload(), latency_ms, "error")
             sink(AgentEvent("tool_result", {"agent": session.agent_name,
                                             "tool": tool.name,
                                             "summary": f"失败: {exc.message}"}))

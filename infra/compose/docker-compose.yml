@@ -1,5 +1,7 @@
 # t2d 全栈（演示模式）。端口约定见 CLAUDE.md；避开宿主机已占用端口。
-# 阶段 2：business-pg + api。worker/nginx/opensandbox-server 随阶段 3/5 加入。
+# 阶段 6 拓扑（单机演示形态）：nginx(8080) → api(8001) + worker(8002)
+# + business-pg(5434, 模拟 DWS) + sandbox-server(8003)。
+# 两台 ECS 生产形态见 docs/deployment.md（ECS-B 跑业务库与状态库）。
 name: t2d
 
 services:
@@ -31,20 +33,77 @@ services:
       business-pg:
         condition: service_healthy
     environment:
-      APP_ENV: dev
+      APP_ENV: prod
       APP_BRAND: t2d
+      APP_SECRET_KEY: ${APP_SECRET_KEY:-change-me-generate-a-random-string}
       STATE_DB_URL: sqlite:////var/lib/t2d/state.db
       DEMO_PG_HOST: business-pg
       DEMO_PG_PORT: "5432"
-      MODEL_API_BASE: http://host.docker.internal:4000/v1
+      MODEL_API_BASE: ${MODEL_API_BASE:-http://host.docker.internal:4000/v1}
       MODEL_API_KEY: ${MODEL_API_KEY:-change-me}
       MODEL_NAME: t2d/deepseek-v4.1-flash-1017
+      SANDBOX_SERVER: http://sandbox-server:8003
+      SANDBOX_API_KEY: ${SANDBOX_API_KEY:-change-me-in-.env-sandbox-api-key}
     ports:
       - "127.0.0.1:8001:8001"
     volumes:
       - t2d_appdata:/var/lib/t2d
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: services/worker/Dockerfile
+    container_name: t2d_worker
+    depends_on:
+      business-pg:
+        condition: service_healthy
+      sandbox-server:
+        condition: service_started
+    environment:
+      APP_ENV: prod
+      STATE_DB_URL: sqlite:////var/lib/t2d/state.db
+      DEMO_PG_HOST: business-pg
+      DEMO_PG_PORT: "5432"
+      MODEL_API_BASE: ${MODEL_API_BASE:-http://host.docker.internal:4000/v1}
+      MODEL_API_KEY: ${MODEL_API_KEY:-change-me}
+      MODEL_NAME: t2d/deepseek-v4.1-flash-1017
+      SANDBOX_SERVER: http://sandbox-server:8003
+      SANDBOX_API_KEY: ${SANDBOX_API_KEY:-change-me-in-.env-sandbox-api-key}
+      TASK_ANALYSIS_CONCURRENCY: "2"
+      SANDBOX_TIMEOUT_S: "120"
+    ports:
+      - "127.0.0.1:8002:8002"
+    volumes:
+      - t2d_appdata:/var/lib/t2d
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  sandbox-server:
+    build:
+      context: ../..
+      dockerfile: infra/sandbox/Dockerfile
+    container_name: t2d_sandbox_server
+    # The server creates sandbox containers via the host docker socket.
+    # Sandboxes themselves get NO host mounts (probe-verified).
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "127.0.0.1:8003:8003"
+    restart: unless-stopped
+
+  nginx:
+    build:
+      context: ../..
+      dockerfile: infra/nginx/Dockerfile
+    container_name: t2d_nginx
+    depends_on:
+      - api
+    ports:
+      - "8080:8080"   # 唯一公网入口（HTTP 演示环境）
     restart: unless-stopped
 
 volumes:

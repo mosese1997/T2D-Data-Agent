@@ -1,0 +1,61 @@
+# 脚本类用例：确定性 API/系统级行为（不走自然语言，不断言模型）
+cases:
+  - id: scripted-query-timeout
+    category: scripted
+    kind: query_timeout
+    note: "慢查询（笛卡尔积）必须被 statement_timeout 杀死且不拖垮宿主"
+
+  - id: scripted-task-cancel
+    category: scripted
+    kind: task_cancel
+    note: "运行中任务取消 → cancelled；SSE 收到 task.cancelled"
+
+  - id: scripted-sandbox-failure
+    category: scripted
+    kind: sandbox_failure
+    note: "沙箱脚本抛错 → run_isolated 返回 not ok（不静默成功）"
+
+  - id: scripted-sandbox-egress-deny
+    category: scripted
+    kind: sandbox_egress
+    note: "沙箱禁网实测：外网请求被拦"
+
+  - id: scripted-patch-conflict
+    category: scripted
+    kind: patch_conflict
+    note: "并发候选变更：后应用者 409 + conflict（复用 verify_phase4 场景）"
+
+  - id: scripted-restart-no-dup
+    category: scripted
+    kind: restart_no_dup
+    note: "SIGKILL worker 中途 → 续跑 → Apply 恰好 1 个版本（复用 verify_phase3 场景）"
+
+  - id: scripted-publish-isolation
+    category: scripted
+    kind: publish_isolation
+    note: "发布副本：目标空间成员可读、非成员被拒、副本不随原板刷新变化"
+
+  - id: scripted-share-no-sql
+    category: scripted
+    kind: share_no_sql
+    note: "分享链接公开可读但不含 SQL/source 元数据"
+
+  - id: scripted-gateway-reject
+    category: scripted
+    kind: gateway_reject
+    note: "网关拒绝：多语句/系统表/未授权对象/危险函数 + 拒绝也落审计"
+
+  - id: scripted-sse-resume
+    category: scripted
+    kind: sse_resume
+    note: "Last-Event-ID 补读从 cursor+1 开始且无重复"
+
+  - id: scripted-idempotency
+    category: scripted
+    kind: idempotency
+    note: "同 idempotency_key 重复提交返回原任务"
+
+  - id: scripted-lease-reap
+    category: scripted
+    kind: lease_reap
+    note: "过期租约被回收器重排队（attempt 内）或标记 interrupted（耗尽）"

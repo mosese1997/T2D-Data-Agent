@@ -1,0 +1,8 @@
+# OpenSandbox server config (t2d compose deployment).
+# Reference: https://github.com/opensandbox-group/OpenSandbox/blob/main/server/configuration.md
+host = "0.0.0.0"
+port = 8003
+api_key = "change-me-in-.env-sandbox-api-key"
+
+[docker]
+# sandbox containers are created via the mounted host docker socket

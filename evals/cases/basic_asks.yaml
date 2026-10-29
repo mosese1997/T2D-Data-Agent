@@ -1,0 +1,176 @@
+# 基础问数：比较标准结果（reference SQL 的值），不比较 SQL 字符串。
+# judge: 实际值与 reference 值相对误差 ≤ tolerance。
+cases:
+  - id: basic-gmv-total
+    category: basic
+    user: analyst_a
+    workspace: latam-growth
+    question: "上周GMV总量是多少"
+    expect:
+      kind: value
+      reference_sql: |
+        SELECT ROUND(SUM(oi.line_amount / fx.rate_to_usd)::numeric, 2) AS v
+        FROM orders o JOIN order_items oi ON oi.order_id = o.order_id
+        LEFT JOIN LATERAL (SELECT rate_to_usd FROM fx_rates
+          WHERE fx_rates.currency = o.currency AND fx_rates.rate_date <= o.fx_date
+          ORDER BY fx_rates.rate_date DESC LIMIT 1) fx ON true
+        WHERE o.status != 'cancelled'
+          AND o.created_at >= date_trunc('week', CURRENT_DATE) - interval '1 week'
+          AND o.created_at < date_trunc('week', CURRENT_DATE)
+      value_field: v
+      tolerance: 0.01
+
+  - id: basic-order-count
+    category: basic
+    user: analyst_a
+    workspace: latam-growth
+    question: "最近7天订单量"
+    expect:
+      kind: value
+      reference_sql: |
+        SELECT COUNT(DISTINCT o.order_id) AS v FROM orders o
+        WHERE o.status != 'cancelled'
+          AND o.created_at >= CURRENT_DATE - interval '7 days'
+          AND o.created_at < CURRENT_DATE
+      value_field: v
+      tolerance: 0.01
+
+  - id: basic-aov
+    category: basic
+    user: analyst_a
+    workspace: latam-growth
+    question: "上周客单价"
+    expect:
+      kind: value
+      reference_sql: |
+        SELECT ROUND((SUM(oi.line_amount / fx.rate_to_usd)
+               / NULLIF(COUNT(DISTINCT o.order_id), 0))::numeric, 2) AS v
+        FROM orders o JOIN order_items oi ON oi.order_id = o.order_id
+        LEFT JOIN LATERAL (SELECT rate_to_usd FROM fx_rates
+          WHERE fx_rates.currency = o.currency AND fx_rates.rate_date <= o.fx_date
+          ORDER BY fx_rates.rate_date DESC LIMIT 1) fx ON true
+        WHERE o.status != 'cancelled'
+          AND o.created_at >= date_trunc('week', CURRENT_DATE) - interval '1 week'
+          AND o.created_at < date_trunc('week', CURRENT_DATE)
+      value_field: v
+      tolerance: 0.02
+
+  - id: basic-gmv-by-country
+    category: basic
+    user: analyst_a
+    workspace: latam-growth
+    question: "上周各国家GMV对比"
+    expect:
+      kind: value
+      reference_sql: |
+        SELECT ROUND(SUM(oi.line_amount / fx.rate_to_usd)::numeric, 2) AS v
+        FROM orders o JOIN order_items oi ON oi.order_id = o.order_id
+        JOIN dim_country c ON c.country_code = o.country_code
+        LEFT JOIN LATERAL (SELECT rate_to_usd FROM fx_rates
+          WHERE fx_rates.currency = o.currency AND fx_rates.rate_date <= o.fx_date
+          ORDER BY fx_rates.rate_date DESC LIMIT 1) fx ON true
+        WHERE o.status != 'cancelled' AND c.country_name = 'Brazil'
+          AND o.created_at >= date_trunc('week', CURRENT_DATE) - interval '1 week'
+          AND o.created_at < date_trunc('week', CURRENT_DATE)
+      value_field: v
+      tolerance: 0.01
+      note: "校验巴西单国的值（多行结果抽一国核对）"
+
+  - id: basic-refund-amount
+    category: basic
+    user: analyst_a
+    workspace: latam-growth
+    question: "最近30天退款额"
+    expect:
+      kind: value
+      reference_sql: |
+        SELECT ROUND(SUM(r.refund_amount / fx.rate_to_usd)::numeric, 2) AS v
+        FROM refunds r JOIN orders o ON o.order_id = r.order_id
+        LEFT JOIN LATERAL (SELECT rate_to_usd FROM fx_rates
+          WHERE fx_rates.currency = o.currency AND fx_rates.rate_date <= o.fx_date
+          ORDER BY fx_rates.rate_date DESC LIMIT 1) fx ON true
+        WHERE r.refunded_at >= CURRENT_DATE - interval '30 days'
+          AND r.refunded_at < CURRENT_DATE
+      value_field: v
+      tolerance: 0.02
+
+  - id: basic-refund-rate
+    category: basic
+    user: analyst_a
+    workspace: latam-growth
+    question: "上周退款率"
+    expect:
+      kind: value
+      reference_sql: |
+        SELECT ROUND((COUNT(DISTINCT r.order_id)::numeric
+               / NULLIF(COUNT(DISTINCT o.order_id), 0))::numeric, 4) AS v
+        FROM orders o LEFT JOIN refunds r ON r.order_id = o.order_id
+        WHERE o.status != 'cancelled'
+          AND o.created_at >= date_trunc('week', CURRENT_DATE) - interval '1 week'
+          AND o.created_at < date_trunc('week', CURRENT_DATE)
+      value_field: v
+      tolerance: 0.10
+      note: "退款率口径存在分母/时间窗解释空间，容差放宽"
+
+  - id: basic-active-buyers
+    category: basic
+    user: analyst_a
+    workspace: latam-growth
+    question: "最近7天下单用户数"
+    expect:
+      kind: value
+      reference_sql: |
+        SELECT COUNT(DISTINCT o.user_id) AS v FROM orders o
+        WHERE o.status != 'cancelled'
+          AND o.created_at >= CURRENT_DATE - interval '7 days'
+          AND o.created_at < CURRENT_DATE
+      value_field: v
+      tolerance: 0.01
+
+  - id: basic-item-count
+    category: basic
+    user: analyst_a
+    workspace: latam-growth
+    question: "最近7天商品件数"
+    expect:
+      kind: value
+      reference_sql: |
+        SELECT SUM(oi.quantity) AS v
+        FROM orders o JOIN order_items oi ON oi.order_id = o.order_id
+        WHERE o.status != 'cancelled'
+          AND o.created_at >= CURRENT_DATE - interval '7 days'
+          AND o.created_at < CURRENT_DATE
+      value_field: v
+      tolerance: 0.01
+
+  - id: basic-cancel-rate
+    category: basic
+    user: analyst_a
+    workspace: latam-growth
+    question: "上周订单取消率"
+    expect:
+      kind: value
+      reference_sql: |
+        SELECT ROUND((COUNT(DISTINCT CASE WHEN o.status = 'cancelled' THEN o.order_id END)::numeric
+               / NULLIF(COUNT(DISTINCT o.order_id), 0))::numeric, 4) AS v
+        FROM orders o
+        WHERE o.created_at >= date_trunc('week', CURRENT_DATE) - interval '1 week'
+          AND o.created_at < date_trunc('week', CURRENT_DATE)
+      value_field: v
+      tolerance: 0.10
+
+  - id: basic-ff-duration
+    category: basic
+    user: analyst_a
+    workspace: latam-growth
+    question: "最近7天平均履约时长"
+    expect:
+      kind: value
+      reference_sql: |
+        SELECT ROUND(AVG(EXTRACT(EPOCH FROM (fe.occurred_at - o.created_at)) / 3600.0)::numeric, 2) AS v
+        FROM fulfillment_events fe JOIN orders o ON o.order_id = fe.order_id
+        WHERE fe.event_type = 'delivered' AND o.status != 'cancelled'
+          AND fe.occurred_at >= CURRENT_DATE - interval '7 days'
+          AND fe.occurred_at < CURRENT_DATE
+      value_field: v
+      tolerance: 0.05

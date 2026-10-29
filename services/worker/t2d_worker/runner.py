@@ -310,6 +310,7 @@ class TaskRunner:
             # Simple modifications (title/legend/layout/text, task book §9)
             # go straight to the design phase — no query sub-agent.
             simple_modify = intent.get("mode") == "simple_modify"
+            is_analysis = intent.get("mode") == "analysis"
 
             # ── phase 2: query sub-agent ────────────────────────────
             sources_info = None
@@ -317,11 +318,18 @@ class TaskRunner:
                 sources_info = checkpoint.get("state", {}).get("sources")
             if sources_info is None and not simple_modify:
                 self._emit(task_id, "phase.started", {"phase": "sql_generate"}, phase="sql_generate")
+                analysis_clause = (
+                    "\n\n这是对比分析任务：请生成**两个** Source——"
+                    "当期（time_spec 指定窗口）与上期（紧邻的上一可比窗口，如 last_natural_week 的上期是再上一个完整自然周）"
+                    "的按维度分组明细，列结构必须相同；purpose 分别标 current_breakdown 与 previous_breakdown。"
+                    if is_analysis else ""
+                )
                 query_messages = [{
                     "role": "user",
                     "content": "分析意图 JSON：\n" + json.dumps(intent, ensure_ascii=False)
                                 + f"\n\n用户原话：{user_text}"
-                                + (f"\n关联看板 dashboard_id={dashboard_id}" if dashboard_id else ""),
+                                + (f"\n关联看板 dashboard_id={dashboard_id}" if dashboard_id else "")
+                                + analysis_clause,
                 }]
                 qresult = await self._run_agent(
                     task_id, ctx, cancel,
@@ -360,6 +368,49 @@ class TaskRunner:
 
             if self._cancel_requested(task_id):
                 self._set_status(task_id, "cancelled")
+                return
+
+            # ── analysis mode: sandbox contribution run → done ──────
+            if is_analysis:
+                self._emit(task_id, "phase.started", {"phase": "analysis"}, phase="analysis")
+                analysis_messages = [{
+                    "role": "user",
+                    "content":
+                        f"用户问题：{user_text}\n"
+                        f"Source 列表：\n" + json.dumps(sources_info, ensure_ascii=False, default=str),
+                }]
+                aresult = await self._run_agent(
+                    task_id, ctx, cancel,
+                    agent_name="analysis", prompt=_prompt("analysis"),
+                    messages=analysis_messages,
+                    tools=build_tools_for("analysis", ctx, self.deps,
+                                          cancel_check=lambda: self._cancel_requested(task_id)),
+                    budget=Budget(max_steps=16, max_tool_calls=10),
+                )
+                if aresult.status == "cancelled":
+                    self._set_status(task_id, "cancelled")
+                    return
+                run_result = aresult.tool_results.get("run_analysis")
+                if aresult.status != "succeeded" or not run_result \
+                        or "analysis_id" not in run_result:
+                    self._set_status(task_id, "failed", error={
+                        "code": "analysis_failed",
+                        "message": (aresult.error or {}).get("message") or "分析执行失败",
+                    })
+                    return
+                self._emit(task_id, "phase.completed",
+                           {"phase": "analysis",
+                            "summary": run_result.get("_summary", "分析完成")},
+                           phase="analysis")
+                self._emit(task_id, "agent.message",
+                           {"content": aresult.content or ""})
+                self._set_status(task_id, "succeeded", result={
+                    "analysis_id": run_result["analysis_id"],
+                    "analysis_type": run_result.get("analysis_type"),
+                    "summary": run_result.get("_summary"),
+                    "sources": [s["source_id"] for s in sources_info],
+                    "conclusion": aresult.content,
+                })
                 return
 
             # ── phase 3: component design → candidate patch ────────

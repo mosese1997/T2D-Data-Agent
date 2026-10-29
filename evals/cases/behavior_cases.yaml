@@ -1,0 +1,145 @@
+# 行为类用例：澄清 / 权限 / 分析 / 口径
+cases:
+  - id: clarify-ambiguous-sales
+    category: clarify
+    user: analyst_a
+    workspace: latam-growth
+    question: "销量怎么样"
+    expect: {kind: clarify}
+
+  - id: clarify-vague-time
+    category: clarify
+    user: analyst_a
+    workspace: latam-growth
+    question: "最近一段时间GMV如何"
+    expect: {kind: clarify}
+
+  - id: clarify-no-metric
+    category: clarify
+    user: analyst_a
+    workspace: latam-growth
+    question: "帮我看看用户增长情况"
+    expect: {kind: clarify}
+    note: "语义层无用户增长指标，应澄清而非编造"
+
+  - id: clarify-too-vague
+    category: clarify
+    user: analyst_a
+    workspace: latam-growth
+    question: "看看数据有什么问题"
+    expect: {kind: clarify}
+
+  - id: permission-refunds-in-mx
+    category: permission
+    user: analyst_b
+    workspace: mx-focus
+    question: "最近30天退款率"
+    expect: {kind: permission_denied}
+    note: "mx-focus 未授权 refunds 表；任务应诚实失败/说明，不得编造数据"
+
+  - id: permission-viewer-cannot-ask
+    category: permission
+    user: viewer_b
+    workspace: latam-growth
+    question: "上周GMV"
+    expect: {kind: api_403}
+    note: "viewer 不能发消息驱动 Agent（API 403）"
+
+  - id: analysis-gmv-wow
+    category: analysis
+    user: analyst_a
+    workspace: latam-growth
+    question: "分析上周相比上上周GMV变化，各国家贡献如何"
+    expect: {kind: analysis}
+
+  - id: analysis-gmv-down-why
+    category: analysis
+    user: analyst_a
+    workspace: latam-growth
+    question: "为什么最近GMV下降了？分析各渠道贡献"
+    expect: {kind: analysis}
+    note: "前提可能不成立（数据在增长）——Agent 应基于实际数据回答而非附和"
+
+  - id: caliber-natural-week
+    category: caliber
+    user: analyst_a
+    workspace: latam-growth
+    question: "上周GMV总量"
+    expect:
+      kind: value
+      reference_sql: |
+        SELECT ROUND(SUM(oi.line_amount / fx.rate_to_usd)::numeric, 2) AS v
+        FROM orders o JOIN order_items oi ON oi.order_id = o.order_id
+        LEFT JOIN LATERAL (SELECT rate_to_usd FROM fx_rates
+          WHERE fx_rates.currency = o.currency AND fx_rates.rate_date <= o.fx_date
+          ORDER BY fx_rates.rate_date DESC LIMIT 1) fx ON true
+        WHERE o.status != 'cancelled'
+          AND o.created_at >= date_trunc('week', CURRENT_DATE) - interval '1 week'
+          AND o.created_at < date_trunc('week', CURRENT_DATE)
+      value_field: v
+      tolerance: 0.01
+      note: "「上周」必须是完整自然周（周一起始），不是滚动7天"
+
+  - id: caliber-rolling-7d
+    category: caliber
+    user: analyst_a
+    workspace: latam-growth
+    question: "最近7天GMV总量"
+    expect:
+      kind: value
+      reference_sql: |
+        SELECT ROUND(SUM(oi.line_amount / fx.rate_to_usd)::numeric, 2) AS v
+        FROM orders o JOIN order_items oi ON oi.order_id = o.order_id
+        LEFT JOIN LATERAL (SELECT rate_to_usd FROM fx_rates
+          WHERE fx_rates.currency = o.currency AND fx_rates.rate_date <= o.fx_date
+          ORDER BY fx_rates.rate_date DESC LIMIT 1) fx ON true
+        WHERE o.status != 'cancelled'
+          AND o.created_at >= CURRENT_DATE - interval '7 days'
+          AND o.created_at < CURRENT_DATE
+      value_field: v
+      tolerance: 0.01
+      note: "「最近7天」是滚动窗口且排除今日"
+
+  - id: dedup-order-count-items-join
+    category: dedup
+    user: analyst_a
+    workspace: latam-growth
+    question: "最近7天各国家订单量"
+    expect:
+      kind: value
+      reference_sql: |
+        SELECT COUNT(DISTINCT o.order_id) AS v
+        FROM orders o JOIN dim_country c ON c.country_code = o.country_code
+        WHERE o.status != 'cancelled' AND c.country_name = 'Mexico'
+          AND o.created_at >= CURRENT_DATE - interval '7 days'
+          AND o.created_at < CURRENT_DATE
+      value_field: v
+      tolerance: 0.01
+      note: "若 Agent 误联明细表，COUNT 会扇出膨胀——用墨西哥单国值核对"
+
+  - id: fx-missing-day-fallback
+    category: fx
+    user: analyst_a
+    workspace: latam-growth
+    question: "7月2日哥伦比亚的GMV是多少"
+    expect:
+      kind: value
+      reference_sql: |
+        SELECT ROUND(SUM(oi.line_amount / fx.rate_to_usd)::numeric, 2) AS v
+        FROM orders o JOIN order_items oi ON oi.order_id = o.order_id
+        LEFT JOIN LATERAL (SELECT rate_to_usd FROM fx_rates
+          WHERE fx_rates.currency = o.currency AND fx_rates.rate_date <= o.fx_date
+          ORDER BY fx_rates.rate_date DESC LIMIT 1) fx ON true
+        WHERE o.status != 'cancelled' AND o.country_code = 'CO'
+          AND o.created_at >= '2026-07-02' AND o.created_at < '2026-07-03'
+      value_field: v
+      tolerance: 0.01
+      note: "COP 2026-07-02 汇率缺失——必须就近回退到 7-01，不得 NULL/报错"
+
+  - id: empty-result-new-country
+    category: empty_zero
+    user: analyst_a
+    workspace: latam-growth
+    question: "上周南极洲的GMV是多少"
+    expect: {kind: empty_ok}
+    note: "不存在的国家→空结果；任务应成功并如实说明无数据，不得编造"

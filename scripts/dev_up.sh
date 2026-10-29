@@ -31,6 +31,18 @@ nohup python3 -m uvicorn t2d_api.main:app --host 127.0.0.1 --port 8001 > var/api
 echo "api pid $!"
 nohup python3 -m t2d_worker.main > var/worker.log 2>&1 &
 echo "worker pid $!"
+
+# OpenSandbox server (probe venv; config from the phase-1 probe)
+if ! curl -sf http://127.0.0.1:8003/health >/dev/null 2>&1; then
+  if [ -x var/probe-venv/bin/opensandbox-server ]; then
+    (cd var/probe-scripts && nohup ../probe-venv/bin/opensandbox-server --config opensandbox-config.toml > sandbox-server.log 2>&1 &)
+    echo "sandbox server starting…"
+  else
+    echo "⚠️  opensandbox-server 不可用（分析功能将无法运行）"
+  fi
+fi
+
 sleep 4
 curl -sf http://127.0.0.1:8001/api/healthz >/dev/null && echo "✅ API :8001"
 curl -sf http://127.0.0.1:8002/healthz >/dev/null && echo "✅ Worker :8002"
+curl -sf http://127.0.0.1:8003/health >/dev/null && echo "✅ Sandbox :8003"
