@@ -84,9 +84,16 @@ class QueryGateway:
 
         validation = validate_sql(sql, allowed_objects=allowed_objects)
         if not validation.valid:
-            # Surface structured errors for the repair loop.
-            from .validator import ValidationResult  # noqa: F401 (re-export convenience)
+            # Rejections are audited too (task book §10: 身份/查询/审计 —
+            # permission denials must leave a trace).
             err = validation.errors[0]
+            if self._audit_hook:
+                self._audit_hook(
+                    identity,
+                    sql,
+                    {"objects": validation.objects_referenced,
+                     "rejected": True, "error_code": err["code"]},
+                )
             raise QueryRejected(err["code"], err["message"], validation=validation)
 
         final_sql = _clamp_limit(validation.normalized_sql, self.limits.max_rows)

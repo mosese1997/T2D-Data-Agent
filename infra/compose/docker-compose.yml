@@ -1,0 +1,52 @@
+# t2d 全栈（演示模式）。端口约定见 CLAUDE.md；避开宿主机已占用端口。
+# 阶段 2：business-pg + api。worker/nginx/opensandbox-server 随阶段 3/5 加入。
+name: t2d
+
+services:
+  business-pg:
+    image: postgres:16-alpine
+    container_name: t2d_business_pg
+    environment:
+      POSTGRES_DB: t2d_biz
+      POSTGRES_USER: t2d
+      POSTGRES_PASSWORD: t2d-demo-only
+    ports:
+      - "127.0.0.1:5434:5432"
+    volumes:
+      - t2d_biz_pgdata:/var/lib/postgresql/data
+      - ../../scripts/schema_business.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U t2d -d t2d_biz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ../..
+      dockerfile: services/api/Dockerfile
+    container_name: t2d_api
+    depends_on:
+      business-pg:
+        condition: service_healthy
+    environment:
+      APP_ENV: dev
+      APP_BRAND: t2d
+      STATE_DB_URL: sqlite:////var/lib/t2d/state.db
+      DEMO_PG_HOST: business-pg
+      DEMO_PG_PORT: "5432"
+      MODEL_API_BASE: http://host.docker.internal:4000/v1
+      MODEL_API_KEY: ${MODEL_API_KEY:-change-me}
+      MODEL_NAME: t2d/deepseek-v4.1-flash-1017
+    ports:
+      - "127.0.0.1:8001:8001"
+    volumes:
+      - t2d_appdata:/var/lib/t2d
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+volumes:
+  t2d_biz_pgdata:
+  t2d_appdata:
