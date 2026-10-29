@@ -12,11 +12,20 @@
 
 最终只输出一个 JSON 对象（不要 markdown 代码块，不要其他文字）：
 {{
+  "mode": "build",
   "metric_keys": ["gmv"],
   "dimensions": ["country_code"],
   "time_spec": "last_natural_week",
   "clarify": null
 }}
+
+mode 取值：
+- "build"：需要查数据（新指标/新图表/新看板）——走完整链路
+- "simple_modify"：纯样式/结构修改，不需要查数据——改标题、改图例、调布局、加/改/删说明文字、删组件。此时 metric_keys/dimensions/time_spec 给空值即可
+- 需要澄清时：clarify 填问题，mode 给 "clarify"
+
+判断规则：用户的话里没有任何数据/指标/查询诉求，只提到标题、文字、布局、图例、组件增删 → simple_modify。
+涉及数据内容（哪怕同时也要改标题）→ build。
 
 字段说明：
 - metric_keys: 命中的 metric_key 列表（来自检索结果）

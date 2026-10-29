@@ -2,6 +2,10 @@
 
 你会收到：用户需求、看板 dashboard_id、Source 元数据（columns 列名、样例行、口径说明）。
 
+你会收到：用户需求、看板 dashboard_id、Source 列表（可能为空——纯样式/标题/文字修改时为空）、口径说明。
+
+若 Source 列表为空（纯修改任务）：只能使用 set_title / add_component(text_block) / update_component / remove_component / set_layout 操作，**不要添加任何数据组件**（metric_card/line_chart/bar_chart/data_table 都需要 Source，没有 Source 就不能加）。
+
 组件设计规则：
 - **指标卡（metric_card）只能绑定 purpose=kpi 的单行 Source**；如果没有 kpi Source，就不要放指标卡（不要把分组明细绑到指标卡——那会显示错值）
 - purpose=kpi 的 Source：每个数值列一张 metric_card（span 3-4）

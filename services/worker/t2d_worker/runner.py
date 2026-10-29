@@ -25,7 +25,9 @@ from agent_adapter.events import to_sse
 from agent_adapter.toolloop import ToolLoopRuntime
 from agent_adapter.toolloop.runtime import attach_context
 from t2d_db import queue
-from t2d_db.models import AgentRun, Dashboard, Message, Task, TaskCheckpoint, ToolCall
+from t2d_db.models import (
+    AgentRun, Dashboard, DashboardVersion, Message, Task, TaskCheckpoint, ToolCall,
+)
 from t2d_db.session import get_sessionmaker, utcnow
 
 from .deps import WorkerDeps
@@ -163,6 +165,95 @@ class TaskRunner:
 
     # ── main entry ─────────────────────────────────────────────────
     async def run_task(self, task_id: int) -> None:
+        if self._load_task_type(task_id) == "refresh":
+            await self.run_refresh_task(task_id)
+            return
+        await self.run_build_task(task_id)
+
+    def _load_task_type(self, task_id: int) -> str:
+        with self.maker() as s:
+            return s.get(Task, task_id).type
+
+    async def run_refresh_task(self, task_id: int) -> None:
+        """Deterministic refresh: re-execute every bound source's SQL with
+        the publisher identity; swap result files in place. No LLM."""
+        from t2d_db.models import DashboardVersion, FileRef, Source
+
+        brief = self._load_task_brief(task_id)
+        dashboard_id = brief["payload"].get("dashboard_id") or brief["dashboard_id"]
+        ctx = context_for_task(task_id)
+        self._emit(task_id, "phase.started", {"phase": "refresh"}, phase="refresh")
+        try:
+            with self.maker() as s:
+                dashboard = s.get(Dashboard, dashboard_id)
+                if dashboard is None or dashboard.workspace_id != ctx.workspace_id:
+                    self._set_status(task_id, "failed", error={
+                        "code": "not_found", "message": "看板不存在或无权刷新"})
+                    return
+                version = (s.get(DashboardVersion, dashboard.current_version_id)
+                           if dashboard.current_version_id else None)
+                if version is None:
+                    self._set_status(task_id, "failed", error={
+                        "code": "no_version", "message": "看板没有版本可刷新"})
+                    return
+                source_ids = sorted({
+                    int(c["source_id"]) for c in version.canvas_json.get("components", [])
+                    if c.get("source_id")
+                })
+            refreshed = 0
+            for sid in source_ids:
+                if self._cancel_requested(task_id):
+                    self._set_status(task_id, "cancelled")
+                    return
+                with self.maker() as s:
+                    source = s.get(Source, sid)
+                    if source is None or source.workspace_id != ctx.workspace_id:
+                        continue
+                    sql_text = source.sql_text
+                result = self.deps.gateway.execute(
+                    identity="publisher", sql=sql_text,
+                    allowed_objects=set(ctx.datasets),
+                    cancel_check=lambda: self._cancel_requested(task_id),
+                )
+                payload = json.dumps(
+                    {"columns": result.columns,
+                     "rows": [list(r) for r in result.rows],
+                     "row_count": result.row_count, "truncated": result.truncated},
+                    ensure_ascii=False, default=str,
+                ).encode()
+                meta = self.deps.files.put(
+                    f"sources/refresh-{sid}-{int(utcnow().timestamp())}.json", payload)
+                with self.maker() as s:
+                    source = s.get(Source, sid)
+                    ref = FileRef(
+                        kind="source_result", storage_key=meta.storage_key,
+                        mime="application/json", size_bytes=meta.size_bytes,
+                        sha256=meta.sha256, workspace_id=ctx.workspace_id,
+                        created_by=ctx.user_id, task_id=task_id,
+                    )
+                    s.add(ref)
+                    s.flush()
+                    source.result_file_id = ref.id
+                    source.row_count = result.row_count
+                    source.col_schema = result.columns
+                    source.status = "active"
+                    s.commit()
+                refreshed += 1
+                self._emit(task_id, "tool.completed", {
+                    "tool": "refresh_source", "agent": "runner",
+                    "summary": f"Source {sid} 刷新：{result.row_count} 行",
+                }, phase="refresh")
+            self._emit(task_id, "phase.completed",
+                       {"phase": "refresh", "summary": f"已刷新 {refreshed} 个 Source"},
+                       phase="refresh")
+            self._set_status(task_id, "succeeded",
+                             result={"dashboard_id": dashboard_id,
+                                     "refreshed_sources": refreshed})
+        except Exception as exc:  # noqa: BLE001
+            self._set_status(task_id, "failed", error={
+                "code": "refresh_error", "message": f"{type(exc).__name__}: {exc}"})
+
+    async def run_build_task(self, task_id: int) -> None:
         brief = self._load_task_brief(task_id)
         payload = brief["payload"]
         checkpoint = brief["checkpoint"]
@@ -203,10 +294,11 @@ class TaskRunner:
                     })
                     return
                 intent = result.structured
-                if intent.get("clarify"):
+                if intent.get("clarify") or intent.get("mode") == "clarify":
                     self._checkpoint(task_id, "waiting_clarification", {"intent": intent})
                     self._emit(task_id, "clarification.requested",
-                               {"question": intent["clarify"]}, phase="intent_parse")
+                               {"question": intent.get("clarify") or "请补充您的需求"},
+                               phase="intent_parse")
                     self._set_status(task_id, "waiting_for_user")
                     return
                 self._checkpoint(task_id, "intent_parsed", {"intent": intent})
@@ -215,11 +307,15 @@ class TaskRunner:
                 self._set_status(task_id, "cancelled")
                 return
 
+            # Simple modifications (title/legend/layout/text, task book §9)
+            # go straight to the design phase — no query sub-agent.
+            simple_modify = intent.get("mode") == "simple_modify"
+
             # ── phase 2: query sub-agent ────────────────────────────
             sources_info = None
             if checkpoint.get("step") in ("query_executed", "patch_proposed"):
                 sources_info = checkpoint.get("state", {}).get("sources")
-            if sources_info is None:
+            if sources_info is None and not simple_modify:
                 self._emit(task_id, "phase.started", {"phase": "sql_generate"}, phase="sql_generate")
                 query_messages = [{
                     "role": "user",
@@ -257,6 +353,10 @@ class TaskRunner:
                            {"phase": "sql_generate",
                             "summary": f"查询成功，{len(sources_info)} 个 Source / {total_rows} 行"},
                            phase="sql_generate")
+            elif simple_modify:
+                sources_info = []
+                self._checkpoint(task_id, "query_executed",
+                                 {"intent": intent, "sources": sources_info})
 
             if self._cancel_requested(task_id):
                 self._set_status(task_id, "cancelled")

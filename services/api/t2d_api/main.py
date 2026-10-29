@@ -11,7 +11,10 @@ import urllib.request
 
 from fastapi import FastAPI
 
-from .routers import auth, conversations, dashboards, files, patches, sources, tasks, workspaces
+from .routers import (
+    auth, conversations, dashboards, files, patches, publish, refresh,
+    shares, sources, tasks, versions, workspaces,
+)
 from .settings import settings
 
 
@@ -54,6 +57,10 @@ def create_app() -> FastAPI:
     app.include_router(tasks.router)
     app.include_router(patches.router)
     app.include_router(sources.router)
+    app.include_router(versions.router)
+    app.include_router(publish.router)
+    app.include_router(shares.router)
+    app.include_router(refresh.router)
 
     @app.get("/api/healthz", tags=["ops"])
     def healthz():
