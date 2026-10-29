@@ -18,10 +18,25 @@ from semantic import SemanticRetriever, load_semantics
 from t2d_db.models import AuditLog
 from t2d_db.session import get_sessionmaker
 
-ROOT = Path(__file__).resolve().parents[3]
-SEMANTIC_CONFIG_DIR = os.environ.get(
-    "SEMANTIC_CONFIG_DIR", str(ROOT / "config" / "semantics")
-)
+def _find_semantic_config_dir() -> str:
+    """Env var first; then walk up (dev tree AND container layouts differ:
+    services/worker/t2d_worker/deps.py has 4 parents to repo root, while
+    /app/t2d_worker/deps.py in the image has only 2)."""
+    env = os.environ.get("SEMANTIC_CONFIG_DIR")
+    if env:
+        return env
+    here = Path(__file__).resolve()
+    for parent in here.parents:
+        candidate = parent / "config" / "semantics"
+        if (candidate / "metrics.yaml").is_file():
+            return str(candidate)
+    raise RuntimeError(
+        "找不到语义配置目录（config/semantics/metrics.yaml）；"
+        "请设置 SEMANTIC_CONFIG_DIR"
+    )
+
+
+SEMANTIC_CONFIG_DIR = _find_semantic_config_dir()
 
 
 @dataclass

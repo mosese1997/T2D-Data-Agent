@@ -67,6 +67,8 @@ if [ "$FULL" -eq 1 ]; then
     curl -sf http://127.0.0.1:8080/api/healthz >/dev/null 2>&1 && break
     sleep 2
   done
+  # compose 重建存在切换窗口（healthz 可能打到旧容器）——稳定等待后再验
+  sleep 8
   if curl -sf http://127.0.0.1:8080/api/healthz >/dev/null; then
     ok "公网入口 :8080/api/healthz 200"
     curl -s http://127.0.0.1:8080/api/healthz | python3 -c "import sys,json; d=json.load(sys.stdin); print('    demo_mode:', d['demo_mode'], '| checks:', d['checks'])"
@@ -78,10 +80,22 @@ if [ "$FULL" -eq 1 ]; then
   else
     bad "前端经 Nginx 不可达"
   fi
-  # SSE 经 Nginx（缓冲关闭验证）：取一个历史任务的事件流头部
+  # SSE 经 Nginx（缓冲关闭验证）：找最近一个有事件的任务取流头部
   TOKEN=$(curl -s -X POST http://127.0.0.1:8080/api/auth/login -H "Content-Type: application/json" -d '{"username":"admin","password":"admin-demo-2026"}' | python3 -c "import sys,json;print(json.load(sys.stdin)['token'])" 2>/dev/null)
-  TASK_ID=$(curl -s "http://127.0.0.1:8080/api/admin/runs?limit=1" -H "Authorization: Bearer $TOKEN" | python3 -c "import sys,json;print(json.load(sys.stdin)[0]['task_id'])" 2>/dev/null)
-  if [ -n "${TASK_ID:-}" ] && timeout 5 curl -s -N "http://127.0.0.1:8080/api/tasks/$TASK_ID/events" -H "Authorization: Bearer $TOKEN" | head -c 20 | grep -q "id:"; then
+  SSE_OK=0
+  for ATTEMPT in 1 2 3; do
+    for TASK_ID in $(curl -s "http://127.0.0.1:8080/api/admin/runs?limit=5" -H "Authorization: Bearer $TOKEN" | python3 -c "import sys,json;print(' '.join(str(t['task_id']) for t in json.load(sys.stdin)))" 2>/dev/null); do
+      # pipefail-safe: capture first, judge after (curl|head gives curl a
+      # SIGPIPE non-zero that pipefail would otherwise misreport).
+      SSE_HEAD=$(timeout 5 curl -s -N "http://127.0.0.1:8080/api/tasks/$TASK_ID/events" -H "Authorization: Bearer $TOKEN" 2>/dev/null | head -c 40 || true)
+      case "$SSE_HEAD" in
+        id:*) SSE_OK=1; break ;;
+      esac
+    done
+    [ "$SSE_OK" -eq 1 ] && break
+    sleep 5
+  done
+  if [ "$SSE_OK" -eq 1 ]; then
     ok "SSE 经 Nginx 无缓冲"
   else
     bad "SSE 经 Nginx 无输出（检查 events location）"

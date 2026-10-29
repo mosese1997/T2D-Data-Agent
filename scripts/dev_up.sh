@@ -35,7 +35,10 @@ echo "worker pid $!"
 # OpenSandbox server (probe venv; config from the phase-1 probe)
 if ! curl -sf http://127.0.0.1:8003/health >/dev/null 2>&1; then
   if [ -x var/probe-venv/bin/opensandbox-server ]; then
-    (cd var/probe-scripts && nohup ../probe-venv/bin/opensandbox-server --config opensandbox-config.toml > sandbox-server.log 2>&1 &)
+    # setsid + full fd detachment: a plain `nohup ... &` keeps the pipe
+    # open and hangs any `dev_up.sh | tail` pipeline.
+    setsid bash -c 'cd var/probe-scripts && exec ../probe-venv/bin/opensandbox-server \
+      --config opensandbox-config.toml > sandbox-server.log 2>&1 < /dev/null' &
     echo "sandbox server starting…"
   else
     echo "⚠️  opensandbox-server 不可用（分析功能将无法运行）"

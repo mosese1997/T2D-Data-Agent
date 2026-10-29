@@ -143,3 +143,41 @@ cases:
     question: "上周南极洲的GMV是多少"
     expect: {kind: empty_ok}
     note: "不存在的国家→空结果；任务应成功并如实说明无数据，不得编造"
+
+  - id: answer-gmv-total
+    category: answer
+    user: analyst_a
+    workspace: latam-growth
+    question: "上周GMV总量是多少？"
+    expect:
+      kind: answer_value
+      reference_sql: |
+        SELECT ROUND(SUM(oi.line_amount / o.rate_to_usd)::numeric, 2) AS v
+        FROM v_orders_fx o JOIN order_items oi ON oi.order_id = o.order_id
+        WHERE o.status != 'cancelled'
+          AND o.created_at >= date_trunc('week', CURRENT_DATE) - interval '1 week'
+          AND o.created_at < date_trunc('week', CURRENT_DATE)
+      tolerance: 0.01
+      note: "问答模式：直接在对话里回答数值，不建看板"
+
+  - id: answer-order-count
+    category: answer
+    user: analyst_a
+    workspace: latam-growth
+    question: "最近7天订单量有多少？"
+    expect:
+      kind: answer_value
+      reference_sql: |
+        SELECT COUNT(DISTINCT o.order_id) AS v FROM v_orders_fx o
+        WHERE o.status != 'cancelled'
+          AND o.created_at >= CURRENT_DATE - interval '7 days'
+          AND o.created_at < CURRENT_DATE
+      tolerance: 0.01
+
+  - id: answer-chitchat
+    category: answer
+    user: analyst_a
+    workspace: latam-growth
+    question: "你能做什么？"
+    expect: {kind: answer_chat}
+    note: "闲聊/功能询问：如实介绍能力，不假装查数据"

@@ -149,6 +149,16 @@ def run_nl_case(case: dict) -> tuple[bool, str, dict]:
     expect = case["expect"]
     kind = expect.get("kind")
     actual = {"task_id": task_id, "status": snapshot.get("status")}
+    if kind == "answer_value":
+        ref = reference_value(expect["reference_sql"])
+        answer = ((snapshot.get("result") or {}).get("answer")) or ""
+        from judge import judge_answer_value
+
+        ok, detail = judge_answer_value(
+            answer=answer, reference_value=ref,
+            tolerance=expect.get("tolerance", 0.01))
+        actual["reference"] = ref
+        return ok, detail, actual
     if kind == "value":
         ref = reference_value(expect["reference_sql"])
         sources = task_sources(task_id)
@@ -263,15 +273,19 @@ def run_scripted(kind: str) -> tuple[bool, str]:
         return t1.id == t2.id, f"{t1.id} == {t2.id}"
 
     if kind == "lease_reap":
+        import uuid as _uuid
         from datetime import timedelta
 
         from t2d_db import queue
         from t2d_db.models import Task
         from t2d_db.session import get_sessionmaker, utcnow
 
+        # Unique key per run: a fixed key would return the PREVIOUS run's
+        # task (idempotency), whose attempts are already exhausted →
+        # interrupted instead of requeued.
         with get_sessionmaker()() as s:
             t = queue.enqueue(type="build_dashboard", workspace_id=1, user_id=1,
-                              payload={}, idempotency_key="eval-reap-1")
+                              payload={}, idempotency_key=f"eval-reap-{_uuid.uuid4()}")
             task = s.get(Task, t.id)
             task.status = "running"
             task.lease_expires_at = utcnow() - timedelta(seconds=1)

@@ -89,4 +89,23 @@ def judge_behavior(*, kind: str, snapshot: dict) -> tuple[bool, str]:
     if kind == "empty_ok":
         ok = status in ("succeeded", "waiting_for_apply", "waiting_for_user")
         return ok, "空结果如实处理" if ok else f"期望空结果诚实处理，实际 {status}"
+    if kind == "answer_chat":
+        answer = (result.get("answer") or "")
+        ok = status == "succeeded" and len(answer) >= 10
+        return ok, f"回答 {len(answer)} 字" if ok else f"期望对话式回答，实际 {status}"
     return False, f"未知行为类型 {kind}"
+
+
+def judge_answer_value(*, answer: str, reference_value: float,
+                       tolerance: float) -> tuple[bool, str]:
+    """The chat answer must contain a number within tolerance of the
+    reference — the value itself, not the SQL, is what's judged."""
+    if reference_value is None:
+        return False, "reference 值为 None"
+    import re
+
+    for token in re.findall(r"[\d,]+(?:\.\d+)?", answer or ""):
+        value = _to_float(token)
+        if value is not None and _within(value, reference_value, tolerance):
+            return True, f"回答中的 {value} ≈ {reference_value}"
+    return False, f"回答未包含与 reference={reference_value} 匹配的数字：{answer[:80]}"

@@ -311,12 +311,13 @@ class TaskRunner:
             # go straight to the design phase — no query sub-agent.
             simple_modify = intent.get("mode") == "simple_modify"
             is_analysis = intent.get("mode") == "analysis"
+            is_answer = intent.get("mode") == "answer"
 
             # ── phase 2: query sub-agent ────────────────────────────
             sources_info = None
             if checkpoint.get("step") in ("query_executed", "patch_proposed"):
                 sources_info = checkpoint.get("state", {}).get("sources")
-            if sources_info is None and not simple_modify:
+            if sources_info is None and not simple_modify and not (is_answer and not intent.get("metric_keys")):
                 self._emit(task_id, "phase.started", {"phase": "sql_generate"}, phase="sql_generate")
                 analysis_clause = (
                     "\n\n这是对比分析任务：请生成**两个** Source——"
@@ -361,10 +362,38 @@ class TaskRunner:
                            {"phase": "sql_generate",
                             "summary": f"查询成功，{len(sources_info)} 个 Source / {total_rows} 行"},
                            phase="sql_generate")
-            elif simple_modify:
+            elif simple_modify or (is_answer and not intent.get("metric_keys")):
                 sources_info = []
                 self._checkpoint(task_id, "query_executed",
                                  {"intent": intent, "sources": sources_info})
+
+            # ── answer mode: reply in chat — no dashboard (user asks, we answer)
+            if is_answer:
+                sources_info = sources_info or []
+                answer_context = self._answer_context(sources_info)
+                self._emit(task_id, "phase.started", {"phase": "answer"}, phase="answer")
+                answer_messages = [{
+                    "role": "user",
+                    "content": f"用户问题：{user_text}\n\n查询结果（可能为空=没有查到数据或闲聊）：\n"
+                                + json.dumps(answer_context, ensure_ascii=False, default=str),
+                }]
+                arsult = await self._run_agent(
+                    task_id, ctx, cancel,
+                    agent_name="main", prompt=_prompt("main_answer"),
+                    messages=answer_messages, tools=[],
+                    budget=Budget(max_steps=4, max_tool_calls=0),
+                )
+                if arsult.status == "cancelled":
+                    self._set_status(task_id, "cancelled")
+                    return
+                answer = (arsult.content or "").strip() or "抱歉，没能生成回答。"
+                self._emit(task_id, "agent.message", {"content": answer})
+                self._set_status(task_id, "succeeded", result={
+                    "answer": answer,
+                    "sources": [s["source_id"] for s in sources_info],
+                    "mode": "answer",
+                })
+                return
 
             if self._cancel_requested(task_id):
                 self._set_status(task_id, "cancelled")
@@ -465,6 +494,32 @@ class TaskRunner:
                 "code": "runner_error", "message": f"{type(exc).__name__}: {exc}"})
 
     # ── helpers ────────────────────────────────────────────────────
+    def _answer_context(self, sources_info: list[dict]) -> list[dict]:
+        """Real rows + caliber notes for the answer agent (from the DB)."""
+        from t2d_db.models import FileRef, Source
+
+        context = []
+        for entry in sources_info:
+            with self.maker() as s:
+                source = s.get(Source, int(entry["source_id"]))
+                if source is None:
+                    continue
+                ref = s.get(FileRef, source.result_file_id) if source.result_file_id else None
+                payload = None
+                if ref is not None:
+                    try:
+                        payload = json.loads(self.deps.files.get(ref.storage_key))
+                    except Exception:
+                        payload = None
+                context.append({
+                    "title": source.title,
+                    "columns": [c.get("name") for c in (payload or {}).get("columns", [])],
+                    "rows": (payload or {}).get("rows", [])[:10],
+                    "row_count": (payload or {}).get("row_count", source.row_count),
+                    "caliber_notes": (source.caliber_notes or {}).get("notes", []),
+                })
+        return context
+
     def _validated_patch(self, task_id: int, dashboard_id: int) -> dict | None:
         """Latest validated patch row for this task, with a recomputed preview."""
         from dashboard_schema import apply_patch

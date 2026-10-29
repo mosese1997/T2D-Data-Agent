@@ -10,6 +10,7 @@ dependencies = [
   "semantic",
   "query-gateway",
   "dashboard-schema",
+  "opensandbox>=1.2,<2",
 ]
 
 [build-system]

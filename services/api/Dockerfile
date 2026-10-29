@@ -10,9 +10,9 @@ COPY packages/cloud_adapters packages/cloud_adapters
 COPY services/api services/api
 COPY config config
 RUN pip install --no-cache-dir --prefix=/install \
-    -e packages/db -e packages/agent_adapter -e packages/semantic \
-    -e packages/query_gateway -e packages/dashboard_schema -e packages/cloud_adapters \
-    -e services/api
+    packages/db packages/agent_adapter packages/semantic \
+    packages/query_gateway packages/dashboard_schema packages/cloud_adapters \
+    services/api
 
 FROM python:3.12-slim
 WORKDIR /app

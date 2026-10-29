@@ -43,10 +43,18 @@
 
 ## 二、一次建板的完整路径（阶段 3 验收路径）
 
+意图段先判 mode（answer / build / analysis / simple_modify / clarify）：
+
+- **answer（数据问答）**：查询段出 KPI Source → 应答 Agent 引用真实数字与口径在对话里直答（不建看板）；闲聊/功能询问如实介绍能力。
+- **build（建板/改板）**：下述 1-7 全链路。
+- **analysis（对比分析）**：查询段出当期/上期双 Source → 沙箱贡献分解 → 非因果结论 + analysis_id（Trace 可查）。
+- **simple_modify（样式修改）**：跳过查询段直入设计段（任务书 §9）。
+
+build 全链路：
 1. 用户消息 → `conversations/{id}/messages`：消息落库 + 任务入队（幂等键）。
 2. Worker 原子领取（乐观 UPDATE，租约 30s/心跳 10s）→ runner。
 3. **意图段**（主 Agent）：search_semantics → 结构化意图；歧义 → waiting_for_user（/answer 回答后重排队）。
-4. **查询段**（查询 Sub-agent）：get_semantic_definition → get_authorized_schema → validate_query →（修复≤2）→ execute_query：网关校验（单 SELECT/白名单/函数黑名单/LIMIT 钳制/60s 超时/只读）→ 业务库 → 结果落 FileStore（sha256）→ Source 行。
+4. **查询段**（查询 Sub-agent）：get_semantic_definition → get_authorized_schema（含语义层列文档：取值域/中英映射）→ validate_query →（修复≤2）→ execute_query：网关校验（单 SELECT/白名单/函数黑名单/LIMIT 钳制/60s 超时/只读）→ 业务库（金额折算走 v_orders_fx 视图，汇率回退结构化）→ 结果落 FileStore（sha256）→ Source 行。
 5. **设计段**（主 Agent）：propose_dashboard_patch（结构/字段/权限/base_revision 校验）→ waiting_for_apply。
 6. 用户 Apply：单事务重验 base_revision → 新 DashboardVersion(revision+1) → 冲突则 409+conflict。
 7. 前端按 canvas 的 source_id 拉数据渲染。
