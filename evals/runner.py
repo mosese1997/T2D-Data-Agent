@@ -348,19 +348,30 @@ def run_scripted(kind: str) -> tuple[bool, str]:
         return ok, f"{sum(1 for c in checks if not c.valid)}/4 拒绝"
 
     if kind == "idempotency":
+        import uuid as _uuid
+
         from t2d_db import queue
         from t2d_db.session import get_sessionmaker
 
         with get_sessionmaker()() as s:
-            from t2d_db.models import User
+            from t2d_db.models import Task, User
 
             user = s.query(User).filter_by(username="analyst_a").first()
             uid = user.id
+        key = f"eval-idem-{_uuid.uuid4()}"
         t1 = queue.enqueue(type="build_dashboard", workspace_id=1, user_id=uid,
-                           payload={}, idempotency_key="eval-idem-1")
+                           payload={}, idempotency_key=key)
         t2 = queue.enqueue(type="build_dashboard", workspace_id=1, user_id=uid,
-                           payload={}, idempotency_key="eval-idem-1")
-        return t1.id == t2.id, f"{t1.id} == {t2.id}"
+                           payload={}, idempotency_key=key)
+        ok = t1.id == t2.id
+        # Cancel the probe task — otherwise a live worker claims this
+        # EMPTY task and actually runs it (found stuck 18min in a run).
+        with get_sessionmaker()() as s:
+            task = s.get(Task, t1.id)
+            task.status = "cancelled"
+            task.cancel_requested = True
+            s.commit()
+        return ok, f"{t1.id} == {t2.id}"
 
     if kind == "lease_reap":
         import uuid as _uuid
@@ -382,7 +393,13 @@ def run_scripted(kind: str) -> tuple[bool, str]:
             s.commit()
         changed = queue.reap_expired()
         with get_sessionmaker()() as s:
-            status = s.get(Task, t.id).status
+            task = s.get(Task, t.id)
+            status = task.status
+            # requeued → a live worker would claim this EMPTY task; cancel it.
+            if status == "queued":
+                task.status = "cancelled"
+                task.cancel_requested = True
+            s.commit()
         return t.id in changed and status == "queued", f"requeued → {status}"
 
     # patch_conflict / restart_no_dup / publish_isolation / share_no_sql /
@@ -429,6 +446,10 @@ def main() -> int:
             return 1
         API = f"http://127.0.0.1:{EVAL_API_PORT}"
         os.environ["STATE_DB_URL"] = f"sqlite:///{EVAL_STATE_DB}"
+        # The judge reads result FILES too — align this process's file
+        # store with the isolated stack's APP_DATA_DIR (found the hard
+        # way: judge saw zero sources while the answers were correct).
+        os.environ["APP_DATA_DIR"] = EVAL_DATA_DIR
     else:
         # demo stack must be up
         try:
