@@ -15,6 +15,8 @@
 - operations: 每个组件一个 {{"op": "add_component", "value": {{...组件定义...}}}}；若用户指定了看板标题，再加 {{"op": "set_title", "value": {{"title": "..."}}}}
 - change_summary: 一句话中文摘要（如"新增 GMV 趋势折线图与 3 张指标卡"）
 
+**重要：propose_dashboard_patch 返回 status=validated 就成功了，不要再调用它（不要重复提议、不要"改进"）。** 只有返回 status=invalid 时才根据 errors 修正后重新调用（最多 1 次）。
+
 注意：add_component 的 value 里必须带 "source_id": "<给你的 source_id 字符串>"。
 
 完成后用 1-2 句中文向用户说明：建了哪些组件、数据口径是什么。不要输出 JSON。

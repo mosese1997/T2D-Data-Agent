@@ -70,6 +70,7 @@ async def stream_events(task_id: int, user: CurrentUser, db: DbDep, request: Req
     cursor = int(last_id) if (last_id or "").isdigit() else 0
 
     async def generate():
+        nonlocal cursor
         maker = get_sessionmaker()
         heartbeat_counter = 0
         while True:

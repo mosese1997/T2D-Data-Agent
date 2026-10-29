@@ -286,19 +286,17 @@ class TaskRunner:
                 if dresult.status == "cancelled":
                     self._set_status(task_id, "cancelled")
                     return
-                patch_result = dresult.tool_results.get("propose_dashboard_patch")
-                if dresult.status != "succeeded" or not patch_result \
-                        or patch_result.get("status") != "validated":
+                # The DB is the truth: the model may call propose more than
+                # once — use the validated patch row for THIS task, not the
+                # last tool echo.
+                patch_info = self._validated_patch(task_id, dashboard_id)
+                if patch_info is None:
+                    patch_result = dresult.tool_results.get("propose_dashboard_patch") or {}
                     self._set_status(task_id, "failed", error={
                         "code": "patch_failed",
-                        "message": (patch_result or {}).get("_summary") or "候选变更生成失败",
+                        "message": patch_result.get("_summary") or "候选变更生成失败",
                     })
                     return
-                patch_info = {
-                    "patch_id": patch_result["patch_id"],
-                    "diff_summary": patch_result.get("diff_summary", ""),
-                    "preview_canvas": patch_result.get("preview_canvas"),
-                }
                 self._checkpoint(task_id, "patch_proposed",
                                  {"intent": intent, "sources": sources_info, "patch": patch_info})
 
@@ -316,6 +314,43 @@ class TaskRunner:
                 "code": "runner_error", "message": f"{type(exc).__name__}: {exc}"})
 
     # ── helpers ────────────────────────────────────────────────────
+    def _validated_patch(self, task_id: int, dashboard_id: int) -> dict | None:
+        """Latest validated patch row for this task, with a recomputed preview."""
+        from dashboard_schema import apply_patch
+        from dashboard_schema.canvas import Canvas
+        from dashboard_schema.patch import Patch
+
+        from t2d_db.models import DashboardPatch
+
+        with self.maker() as s:
+            row = (
+                s.query(DashboardPatch)
+                .filter_by(task_id=task_id, status="validated")
+                .order_by(DashboardPatch.id.desc())
+                .first()
+            )
+            if row is None:
+                return None
+            dashboard = s.get(Dashboard, dashboard_id)
+            current = (
+                s.get(DashboardVersion, dashboard.current_version_id)
+                if dashboard and dashboard.current_version_id else None
+            )
+            base_canvas = current.canvas_json if current else {
+                "schema_version": "1.0", "title": dashboard.title if dashboard else "",
+                "filters": {"allowed": [], "defaults": {}},
+                "layout": {"grid_cols": 12, "order": []}, "components": [],
+            }
+            diff = row.diff_summary or ""
+            patch_id, patch_json = row.id, row.patch_json
+        try:
+            after = apply_patch(Canvas.model_validate(base_canvas),
+                                Patch.model_validate(patch_json))
+            preview = after.model_dump()
+        except Exception:
+            preview = None
+        return {"patch_id": patch_id, "diff_summary": diff, "preview_canvas": preview}
+
     def _validated_sources(self, task_id: int, ctx, structured: dict,
                            last_exec: dict) -> list[dict]:
         """Sources list from the query agent's structured output, validated

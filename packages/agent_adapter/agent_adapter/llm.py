@@ -16,9 +16,11 @@ from openai import AsyncOpenAI, PermissionDeniedError
 
 # Upstream MaaS runs a flaky content-moderation pre-filter that sometimes
 # false-positives on innocuous business SQL ("May contain sensitive
-# information, please try again"). It is a soft reject: retrying usually
-# passes. Hard 403s (bad key) are NOT retried.
-MODERATION_MAX_RETRIES = 2
+# information, please try again"). It is a soft, probabilistic reject:
+# the SAME request can pass on retry (observed both ways). Retry with
+# backoff; hard 403s (bad key) are NOT retried.
+MODERATION_MAX_RETRIES = 4
+MODERATION_BACKOFF_S = (2.0, 4.0, 6.0, 8.0)
 
 
 def _is_moderation_false_positive(exc: Exception) -> bool:
@@ -78,7 +80,7 @@ class LLMClient:
                     raise
                 if attempt == MODERATION_MAX_RETRIES:
                     raise
-                await asyncio.sleep(1.0 + attempt)
+                await asyncio.sleep(MODERATION_BACKOFF_S[min(attempt, len(MODERATION_BACKOFF_S) - 1)])
         choice = resp.choices[0]
         message = choice.message
         tool_calls: list[dict[str, Any]] = []
