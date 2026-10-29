@@ -185,3 +185,145 @@ export interface RowsResponse {
   page: number;
   size: number;
 }
+
+// ---- publish approvals ----
+export interface ApprovalRequest {
+  approval_id: number;
+  publication_id: number;
+  dashboard_title: string;
+  target_workspace: string;
+  comment: string | null;
+  requested_by: number;
+  created_at: string;
+}
+
+// ---- admin: runs & trace ----
+export interface AdminRun {
+  task_id: number;
+  type: string | null;
+  status: string;
+  workspace_id: number;
+  user_id: number;
+  dashboard_id: number | null;
+  created_at: string;
+  finished_at: string | null;
+  error: string | null;
+}
+
+export interface AgentRunNode {
+  id: number;
+  agent_name: string;
+  parent_run_id: number | null;
+  runtime: string;
+  model: string;
+  status: string;
+  token_usage: Record<string, unknown> | null;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export interface ToolCallRow {
+  seq: number;
+  agent_name: string;
+  tool_name: string;
+  input: Record<string, unknown> | null;
+  output: Record<string, unknown> | null;
+  status: string;
+  error: string | null;
+  latency_ms: number;
+  created_at: string;
+}
+
+export interface RunTrace {
+  task: {
+    id: number;
+    type: string | null;
+    status: string;
+    result: unknown;
+    error: string | null;
+    checkpoint: unknown;
+    created_at: string;
+  };
+  agent_runs: AgentRunNode[];
+  tool_calls: ToolCallRow[];
+}
+
+// ---- admin: wiki (any member can read) ----
+export interface MetricEntry {
+  metric_key: string;
+  name: string;
+  synonyms: string[];
+  description: string;
+  base_dataset: string | null;
+  grain: string | null;
+  exclusions: string[];
+  currency_policy: string | null;
+  version: string | null;
+}
+
+export interface TermEntry {
+  term: string;
+  aliases: string[];
+  definition: string;
+  ref_metric: string | null;
+}
+
+export interface WikiData {
+  metrics: MetricEntry[];
+  terms: TermEntry[];
+}
+
+// ---- admin: agent config ----
+export interface AgentBudget {
+  prompt_version?: string;
+  max_steps?: number;
+  max_tool_calls?: number;
+  [key: string]: unknown;
+}
+
+export interface AgentConfigResponse {
+  config: {
+    agent: {
+      runtime: string;
+      model: string;
+      temperature?: number;
+      max_tokens?: number;
+      main_agent?: AgentBudget;
+      query_agent?: AgentBudget;
+      analysis_agent?: AgentBudget;
+      [key: string]: unknown;
+    };
+  };
+  runtime_capabilities: Record<string, Record<string, unknown>>;
+}
+
+// ---- admin: knowledge index ----
+export interface KnowledgeIndex {
+  engine: string;
+  semantic_version: string;
+  metrics: number;
+  terms: number;
+  join_rules: number;
+  note: string;
+}
+
+// ---- admin: evals ----
+export interface EvalSummary {
+  total?: number;
+  passed?: number;
+  failed?: number;
+  accuracy?: number;
+}
+
+export interface EvalCaseStatus {
+  case_id: string;
+  status: string;
+}
+
+export interface EvalRunEntry {
+  id: number;
+  case_set: string;
+  summary: EvalSummary;
+  created_at: string;
+  cases: EvalCaseStatus[];
+}

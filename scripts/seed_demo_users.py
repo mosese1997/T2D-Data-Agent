@@ -29,6 +29,7 @@ ACCOUNTS = [
 ALL_DATASETS = [
     "orders", "order_items", "refunds", "fulfillment_events",
     "dim_country", "dim_city", "dim_category", "dim_channel", "dim_product", "fx_rates",
+    "v_orders_fx",
 ]
 MX_SUBSET = ["orders", "order_items", "dim_country", "dim_channel", "fx_rates"]
 

@@ -135,13 +135,14 @@ def run_nl_case(case: dict) -> tuple[bool, str, dict]:
     token = login(case["user"])
     _, workspaces = api("GET", "/api/workspaces", token)
     ws_id = next(w["id"] for w in workspaces if w["slug"] == case["workspace"])
-    _, conv = api("POST", "/api/conversations", token,
-                  {"workspace_id": ws_id, "title": f"eval-{case['id']}"})
-    code, sent = api("POST", f"/api/conversations/{conv['id']}/messages", token,
-                     {"content": case["question"]})
+    code, conv = api("POST", "/api/conversations", token,
+                     {"workspace_id": ws_id, "title": f"eval-{case['id']}"})
     if case["expect"].get("kind") == "api_403":
+        # Viewers are blocked at conversation creation (require analyst+).
         ok = code == 403
-        return ok, f"HTTP {code}", {}
+        return ok, f"conversation create → HTTP {code}", {}
+    _, sent = api("POST", f"/api/conversations/{conv['id']}/messages", token,
+                  {"content": case["question"]})
     task_id = sent["task_id"]
     snapshot = wait_task(token, task_id)
 
@@ -194,7 +195,20 @@ def run_scripted(kind: str) -> tuple[bool, str]:
         _, conv = api("POST", "/api/conversations", token, {"workspace_id": 1})
         _, sent = api("POST", f"/api/conversations/{conv['id']}/messages", token,
                       {"content": "最近30天各国家GMV趋势"})
-        time.sleep(6)  # let it enter running
+        # Wait until the task is actually RUNNING before cancelling —
+        # cancelling a task that already failed proves nothing.
+        deadline = time.time() + 60
+        status = None
+        while time.time() < deadline:
+            _, snap = api("GET", f"/api/tasks/{sent['task_id']}", token)
+            status = snap.get("status")
+            if status == "running":
+                break
+            if status in ("failed", "cancelled", "succeeded", "waiting_for_apply"):
+                return False, f"任务未进入 running 就结束了（{status}）"
+            time.sleep(1)
+        if status != "running":
+            return False, f"60s 内未进入 running（{status}）"
         api("POST", f"/api/tasks/{sent['task_id']}/cancel", token)
         snapshot = wait_task(token, sent["task_id"], timeout_s=120)
         return snapshot.get("status") == "cancelled", f"status={snapshot.get('status')}"
@@ -291,6 +305,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--case-set", default="smoke",
                         choices=["smoke", "nl", "scripted", "full"])
+    parser.add_argument("--filter", default=None,
+                        help="只跑 id 含该子串的用例（逗号分隔多个）")
     args = parser.parse_args()
 
     # services must be up
@@ -302,7 +318,10 @@ def main() -> int:
         return 1
 
     cases = load_cases()
-    if args.case_set == "smoke":
+    if args.filter:
+        wanted = {s.strip() for s in args.filter.split(",")}
+        cases = [c for c in cases if any(w in c["id"] for w in wanted)]
+    elif args.case_set == "smoke":
         cases = [c for c in cases if c["id"] in SMOKE_IDS]
     elif args.case_set == "nl":
         cases = [c for c in cases if c["category"] != "scripted"]

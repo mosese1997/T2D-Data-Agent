@@ -4,7 +4,7 @@ cases:
     category: clarify
     user: analyst_a
     workspace: latam-growth
-    question: "销量怎么样"
+    question: "卖得好不好"
     expect: {kind: clarify}
 
   - id: clarify-vague-time
@@ -121,7 +121,7 @@ cases:
     category: fx
     user: analyst_a
     workspace: latam-growth
-    question: "7月2日哥伦比亚的GMV是多少"
+    question: "2026年7月2日哥伦比亚的GMV是多少美元"
     expect:
       kind: value
       reference_sql: |

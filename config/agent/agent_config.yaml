@@ -1,35 +1,25 @@
-# t2d Agent 配置 — 唯一的运行时切换开关（CLAUDE.md）
-# runtime: toolloop（自建基线，默认）| swarmflow（探测 GO，阶段 3 接入适配器）
 agent:
   runtime: toolloop
   model: t2d/deepseek-v4.1-flash-1017
   temperature: 0.2
   max_tokens: 4096
-
-  # 主 Agent
   main_agent:
-    prompt_version: "1"
+    prompt_version: '1'
     max_steps: 40
     max_tool_calls: 30
     max_tokens_per_task: 500000
-
-  # 查询 Sub-agent
   query_agent:
-    prompt_version: "1"
+    prompt_version: '1'
     max_steps: 24
     max_tool_calls: 16
-    max_sql_repairs: 2      # 查询修复上限（任务书 §10）
-
-  # 分析 Sub-agent（阶段 5）
+    max_sql_repairs: 2
   analysis_agent:
-    prompt_version: "1"
+    prompt_version: '1'
     max_steps: 24
     max_tool_calls: 16
-    sandbox_timeout_s: 120  # 任务书 §11 默认，可配置
-
-  # swarmflow 专用（runtime: swarmflow 时生效）
+    sandbox_timeout_s: 120
   swarmflow:
-    openjiuwen_home: var/openjiuwen   # 钉住框架状态目录
+    openjiuwen_home: var/openjiuwen
     enable_sys_operation: false
-    enable_read_image_multimodal: false  # 跳过每 worker 一次的多模态探测调用
-    default_cap: 4                      # 并发 worker 上限（默认 min(16, cpu-2)）
+    enable_read_image_multimodal: false
+    default_cap: 4

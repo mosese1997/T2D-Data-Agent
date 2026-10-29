@@ -18,4 +18,4 @@ from . import (
 
 __all__ = ["admin", "auth", "conversations", "dashboards", "files", "patches",
            "publish", "refresh", "shares", "sources", "tasks", "versions",
-           "workspaces"}
+           "workspaces"]

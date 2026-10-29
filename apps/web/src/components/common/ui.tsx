@@ -45,6 +45,32 @@ export function StatusBadge({ status }: { status: string }) {
   return <span className={`badge ${STATUS_CLASS[status] ?? 'badge-gray'}`}>{STATUS_LABELS[status] ?? status}</span>;
 }
 
+/** 任务运行状态配色：succeeded 绿 / failed 红 / queued 灰 / running 蓝 / waiting_* 黄 */
+const RUN_STATUS_CLASS: Record<string, string> = {
+  succeeded: 'badge-green',
+  failed: 'badge-red',
+  queued: 'badge-gray',
+  running: 'badge-blue',
+  waiting_for_user: 'badge-orange',
+  waiting_for_apply: 'badge-orange',
+  cancelled: 'badge-gray',
+  interrupted: 'badge-gray',
+};
+
+export function RunStatusBadge({ status }: { status: string }) {
+  return <span className={`badge ${RUN_STATUS_CLASS[status] ?? 'badge-gray'}`}>{STATUS_LABELS[status] ?? status}</span>;
+}
+
+/** JSON 美化打印；无法序列化时退化为 String() */
+export function prettyJson(v: unknown): string {
+  if (v === null || v === undefined) return '—';
+  try {
+    return JSON.stringify(v, null, 2);
+  } catch {
+    return String(v);
+  }
+}
+
 export function formatDateTime(iso: string | null | undefined): string {
   if (!iso) return '—';
   const d = new Date(iso);

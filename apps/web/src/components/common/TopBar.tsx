@@ -3,6 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/auth';
 import { useHealthStore } from '../../stores/health';
 import { useWorkspaces } from '../../hooks/useWorkspaces';
+import { useIsAdmin } from '../../hooks/useIsAdmin';
 
 export default function TopBar() {
   const navigate = useNavigate();
@@ -11,6 +12,7 @@ export default function TopBar() {
   const logout = useAuthStore((s) => s.logout);
   const brand = useHealthStore((s) => s.health?.brand ?? 't2d');
   const { workspaces } = useWorkspaces();
+  const isAdmin = useIsAdmin();
 
   const [wsMenuOpen, setWsMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -82,6 +84,25 @@ export default function TopBar() {
             </NavLink>
           </nav>
         )}
+        <nav className="topbar-tabs topbar-global" aria-label="全局导航">
+          <NavLink to="/requests" className={({ isActive }) => `tab ${isActive ? 'active' : ''}`}>
+            审批
+          </NavLink>
+          <NavLink to="/activity" className={({ isActive }) => `tab ${isActive ? 'active' : ''}`}>
+            活动
+          </NavLink>
+          <NavLink to="/wiki" className={({ isActive }) => `tab ${isActive ? 'active' : ''}`}>
+            Wiki
+          </NavLink>
+          {isAdmin === true && (
+            <NavLink
+              to="/admin"
+              className={({ isActive }) => `tab ${isActive ? 'active' : ''}`}
+            >
+              管理台
+            </NavLink>
+          )}
+        </nav>
       </div>
 
       <div className="topbar-right">

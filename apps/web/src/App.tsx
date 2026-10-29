@@ -12,6 +12,11 @@ import HomePage from './pages/HomePage';
 import WorkspacePage from './pages/WorkspacePage';
 import StudioPage from './pages/StudioPage';
 import SourcesPage from './pages/SourcesPage';
+import RequestsPage from './pages/RequestsPage';
+import ActivityPage from './pages/ActivityPage';
+import WikiPage from './pages/WikiPage';
+import AdminPage from './pages/AdminPage';
+import AdminRunTracePage from './pages/AdminRunTracePage';
 
 function RequireAuth() {
   const { token, ready } = useAuthStore();
@@ -84,6 +89,11 @@ export default function App() {
           <Route path="/w/:workspaceId/new" element={<StudioPage />} />
           <Route path="/w/:workspaceId/d/:dashboardId" element={<StudioPage />} />
           <Route path="/w/:workspaceId/sources" element={<SourcesPage />} />
+          <Route path="/requests" element={<RequestsPage />} />
+          <Route path="/activity" element={<ActivityPage />} />
+          <Route path="/wiki" element={<WikiPage />} />
+          <Route path="/admin" element={<AdminPage />} />
+          <Route path="/admin/runs/:taskId" element={<AdminRunTracePage />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

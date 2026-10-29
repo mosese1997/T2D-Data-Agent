@@ -163,3 +163,53 @@ def knowledge_index(user: CurrentUser, db: DbDep):
         "join_rules": len(registry.join_rules),
         "note": "演示模式：本地词法+向量混合检索；CSS 凭据接入后切换（见 boundaries.md）",
     }
+
+
+@router.get("/evals")
+def list_evals(user: CurrentUser, db: DbDep, limit: int = 20):
+    """Eval runs with summaries (fixed case suites, task book §18)."""
+    _require_admin(user, db)
+    from t2d_db.models import EvalCaseResult, EvalRun
+
+    runs = (
+        db.query(EvalRun).order_by(EvalRun.id.desc()).limit(min(limit, 100)).all()
+    )
+    result = []
+    for run in runs:
+        cases = (
+            db.query(EvalCaseResult)
+            .filter(EvalCaseResult.eval_run_id == run.id)
+            .order_by(EvalCaseResult.id)
+            .all()
+        )
+        result.append({
+            "id": run.id, "case_set": run.case_set, "summary": run.summary,
+            "created_at": run.created_at.isoformat(),
+            "cases": [
+                {"case_id": c.case_id, "status": c.status} for c in cases
+            ],
+        })
+    return result
+
+
+@router.get("/wiki")
+def wiki(user: CurrentUser, db: DbDep):
+    """Metric & term dictionary (Wiki page). Any member can read."""
+    from t2d_db.models import Metric, Term
+
+    metrics = db.query(Metric).filter_by(status="active").order_by(Metric.metric_key).all()
+    terms = db.query(Term).order_by(Term.term).all()
+    return {
+        "metrics": [
+            {"metric_key": m.metric_key, "name": m.name, "synonyms": m.synonyms,
+             "description": m.description, "base_dataset": m.base_dataset,
+             "grain": m.grain, "exclusions": m.exclusions,
+             "currency_policy": m.currency_policy, "version": m.version}
+            for m in metrics
+        ],
+        "terms": [
+            {"term": t.term, "aliases": t.aliases, "definition": t.definition,
+             "ref_metric": t.ref_metric_key}
+            for t in terms
+        ],
+    }

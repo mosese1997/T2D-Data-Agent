@@ -4,11 +4,10 @@
 1. get_semantic_definition(keys=意图里的 metric_keys) —— 拿权威口径：表达式、排除条件、币种策略、可用维度、合法关联。
 2. get_authorized_schema() —— 拿当前业务空间授权表的列结构。
 3. 按指标定义拼 SQL，规则：
-   - 表别名固定：orders=o, order_items=oi, refunds=r, fulfillment_events=fe, fx_rates=fx, dim_country=c, dim_channel=ch, dim_product=p, dim_category=cat
-   - 度量表达式直接取 definition.expression（含别名，如 SUM(oi.line_amount / fx.rate_to_usd)）
+   - 表别名固定：order_items=oi, refunds=r, fulfillment_events=fe, dim_country=c, dim_channel=ch, dim_product=p, dim_category=cat
+   - **涉及订单的查询一律 FROM v_orders_fx o**（内置汇率就近回退的订单视图，o.rate_to_usd 永不为 NULL）——不要 FROM orders 再手写 fx JOIN
+   - 度量表达式直接取 definition.expression（含别名，如 SUM(oi.line_amount / o.rate_to_usd)）；o 来自 v_orders_fx
    - 排除条件（exclusions 里是业务描述）必须落实为 WHERE 子句（如 o.status != 'cancelled'；"退款不计入扣减"这类说明性条目除外）
-   - 跨国家金额必须做汇率关联，用 LATERAL 就近回退（缺失汇率日取前一有效日）：
-     LEFT JOIN LATERAL (SELECT rate_to_usd FROM fx_rates WHERE fx_rates.currency = o.currency AND fx_rates.rate_date <= o.fx_date ORDER BY fx_rates.rate_date DESC LIMIT 1) fx ON true
    - 时间过滤基于 definition.time_field：
      last_natural_week：o.created_at >= '<上周一>' AND o.created_at < '<本周一>'
      last_7_days：o.created_at >= CURRENT_DATE - interval '7 days' AND o.created_at < CURRENT_DATE

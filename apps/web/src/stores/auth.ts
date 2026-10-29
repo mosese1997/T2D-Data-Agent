@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { ApiError } from '../api/error';
+import { clearWorkspacesCache } from '../hooks/useWorkspaces';
 import type { LoginResponse, User } from '../api/types';
 
 interface AuthState {
@@ -51,6 +52,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
   logout: () => {
     persist(null, null);
+    clearWorkspacesCache();
     set({ token: null, user: null });
   },
   markReady: () => set({ ready: true }),
@@ -67,5 +69,6 @@ export async function login(username: string, password: string): Promise<void> {
     throw new ApiError(res.status, msg);
   }
   const data = (await res.json()) as LoginResponse;
+  clearWorkspacesCache();
   useAuthStore.getState().setSession(data.token, data.user);
 }

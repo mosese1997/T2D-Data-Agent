@@ -1090,3 +1090,311 @@ li { margin: 2px 0; }
     display: none;
   }
 }
+
+/* ===================== 二期：审批 / 活动 / Wiki / 管理台 ===================== */
+.topbar-global {
+  margin-left: auto;
+}
+
+/* 空态与提示 */
+.empty-state {
+  text-align: center;
+  padding: 36px 16px;
+}
+.empty-state-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.note-box {
+  background: var(--warn-soft);
+  color: var(--warn-text);
+  border: 1px solid #f3ddb0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  margin: 10px 0 0;
+  word-break: break-word;
+}
+
+/* 审批列表 */
+.requests-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.request-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.request-main {
+  min-width: 0;
+}
+.request-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.request-comment {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--text);
+  background: #f7f9fc;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  word-break: break-word;
+}
+.request-actions {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+
+/* 运行列表 */
+.runs-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.row-click tbody tr {
+  cursor: pointer;
+}
+.cell-error {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 区块 tab */
+.section-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+.section-tabs .tab {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+}
+.section-tabs .tab.active {
+  background: none;
+  border-bottom-color: var(--primary);
+}
+
+/* Wiki 卡片 */
+.wiki-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 12px;
+}
+.wiki-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.wiki-card-head h3 {
+  margin: 0;
+}
+.wiki-card-key {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 12px;
+  color: var(--muted);
+  margin: 2px 0 8px;
+}
+.tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.tag {
+  display: inline-block;
+  background: #eef1f5;
+  color: #475467;
+  border-radius: 999px;
+  padding: 0 8px;
+  font-size: 12px;
+  line-height: 18px;
+  margin-right: 4px;
+}
+.kv-list {
+  font-size: 13px;
+}
+.kv-row {
+  display: flex;
+  gap: 10px;
+  padding: 4px 0;
+  border-bottom: 1px dashed var(--border);
+  word-break: break-word;
+}
+.kv-row:last-child {
+  border-bottom: none;
+}
+.kv-key {
+  color: var(--muted);
+  flex: none;
+  min-width: 88px;
+}
+
+/* 管理台 */
+.admin-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.runtime-switch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.cap-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+.cap-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #fbfcfe;
+}
+.cap-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+/* 评测 */
+.evals-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.eval-item {
+  padding: 10px 16px;
+}
+.eval-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text);
+}
+.eval-title {
+  font-weight: 600;
+}
+.eval-cases {
+  margin-top: 10px;
+}
+.eval-case-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.eval-case {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  background: #f7f9fc;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 8px;
+}
+
+/* Trace 详情 */
+.trace-node {
+  border-left: 2px solid var(--border);
+  padding: 6px 0 6px 14px;
+  margin: 6px 0;
+}
+.trace-node-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.trace-agent {
+  font-weight: 600;
+}
+.trace-node-meta {
+  font-size: 12px;
+  margin-top: 2px;
+}
+.json-details {
+  margin-top: 10px;
+}
+.json-details summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+  margin: 6px 0;
+  user-select: none;
+}
+.json-details summary:hover {
+  color: var(--text);
+}
+.json-block {
+  background: #f7f9fc;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 6px 0;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre;
+  word-break: break-word;
+}
+.tool-io-row td {
+  background: #fbfcfe;
+}
+
+@media (max-width: 720px) {
+  .request-item {
+    flex-direction: column;
+  }
+  .request-actions {
+    width: 100%;
+  }
+  .topbar-global {
+    margin-left: 0;
+  }
+}
+
+/* 等待用户操作的醒目横幅（澄清/待应用）——不能让用户误以为还在进行中 */
+.waiting-banner {
+  background: #fff7e0;
+  border: 1px solid #f0c36d;
+  color: #7a5b00;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+  margin-bottom: 10px;
+}

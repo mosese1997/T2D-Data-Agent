@@ -1,8 +1,24 @@
 # 数据集定义 — 业务仓库（DWS 职责，演示模式为本地 Postgres）
 # semantic_version 变更意味着口径变化：检索索引需重建，已发布看板引用旧版本。
-semantic_version: "1"
+semantic_version: "2"
 
 datasets:
+  v_orders_fx:
+    grain: order
+    primary_key: order_id
+    time_field: created_at
+    description: 订单视图（内置汇率就近回退，rate_to_usd 永不为 NULL）；金额折算用这个
+    columns:
+      order_id: 订单ID
+      user_id: 买家ID
+      country_code: 国家代码
+      city_id: 城市ID
+      channel_id: 渠道ID
+      created_at: 下单时间 (UTC)
+      status: 订单状态 (completed/cancelled)
+      currency: 当地币种
+      fx_date: 汇率日期
+      rate_to_usd: 兑 USD 汇率（缺失日已回退）
   orders:
     grain: order
     primary_key: order_id

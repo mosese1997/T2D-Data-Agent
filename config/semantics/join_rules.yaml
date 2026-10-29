@@ -37,13 +37,13 @@ join_rules:
     join_type: inner
     join_keys: {channel_id: channel_id}
     cardinality: "N:1"
-  - rule_key: orders_to_fx
-    left_dataset: orders
-    right_dataset: fx_rates
-    join_type: left
-    join_keys: {currency: currency, fx_date: rate_date}
-    cardinality: "N:1"
-    notes: 汇率缺失日需回退到就近前一有效日（生成 SQL 时用 LATERAL 或窗口处理）
+  - rule_key: orders_via_fx_view
+    left_dataset: v_orders_fx
+    right_dataset: orders
+    join_type: identity
+    join_keys: {order_id: order_id}
+    cardinality: "1:1"
+    notes: v_orders_fx 是内置汇率回退的订单视图（缺失汇率日自动取就近前一有效日）；金额折算一律 FROM v_orders_fx o，用 o.rate_to_usd，禁止手写 fx JOIN
   - rule_key: refunds_to_orders
     left_dataset: refunds
     right_dataset: orders

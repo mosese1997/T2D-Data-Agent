@@ -106,11 +106,15 @@ export default function AgentPanel({ workspaceId, dashboardId, collapsed, onTogg
           value={input}
           rows={2}
           placeholder={
-            task.active
-              ? '任务进行中…（可点击取消）'
-              : dashboardId === null
-                ? '描述你想看的看板，例如：最近 7 天各国 GMV 趋势'
-                : '描述你想对看板做的修改…'
+            task.status === 'waiting_for_user'
+              ? '等你回复上方的问题后任务才会继续…'
+              : task.status === 'waiting_for_apply'
+                ? '候选变更待应用（见上方卡片），应用后即可继续对话…'
+                : task.active
+                  ? '任务进行中…（可点击取消）'
+                  : dashboardId === null
+                    ? '描述你想看的看板，例如：最近 7 天各国 GMV 趋势'
+                    : '描述你想对看板做的修改…'
           }
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {

@@ -98,7 +98,7 @@ cases:
     category: basic
     user: analyst_a
     workspace: latam-growth
-    question: "上周退款率"
+    question: "上周下单的订单退款率是多少"
     expect:
       kind: value
       reference_sql: |

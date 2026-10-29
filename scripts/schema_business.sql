@@ -88,4 +88,17 @@ CREATE INDEX IF NOT EXISTS ix_fe_order_type   ON fulfillment_events (order_id, e
 CREATE INDEX IF NOT EXISTS ix_fe_time         ON fulfillment_events (occurred_at);
 CREATE INDEX IF NOT EXISTS ix_fx_lookup       ON fx_rates (currency, rate_date);
 
+-- 汇率回退视图：缺失汇率日自动取就近前一有效日（口径规则结构化——
+-- Agent 直接 JOIN 本视图，不需要在 SQL 里手写 LATERAL 回退）。
+CREATE OR REPLACE VIEW v_orders_fx AS
+SELECT o.order_id, o.user_id, o.country_code, o.city_id, o.channel_id,
+       o.created_at, o.status, o.currency, o.fx_date,
+       fx.rate_to_usd
+FROM orders o
+LEFT JOIN LATERAL (
+    SELECT rate_to_usd FROM fx_rates
+    WHERE fx_rates.currency = o.currency AND fx_rates.rate_date <= o.fx_date
+    ORDER BY fx_rates.rate_date DESC LIMIT 1
+) fx ON true;
+
 ANALYZE;

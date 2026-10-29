@@ -7,6 +7,11 @@ import type { Workspace } from '../api/types';
 let cache: Workspace[] | null = null;
 let inflight: Promise<Workspace[]> | null = null;
 
+/** 登录/登出时清掉缓存：角色（role）随账号变化，不能跨会话复用 */
+export function clearWorkspacesCache(): void {
+  cache = null;
+}
+
 export function useWorkspaces(): { workspaces: Workspace[] | null; error: string | null } {
   const [workspaces, setWorkspaces] = useState<Workspace[] | null>(cache);
   const [error, setError] = useState<string | null>(null);
