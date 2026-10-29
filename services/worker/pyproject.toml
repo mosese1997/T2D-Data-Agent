@@ -1,0 +1,20 @@
+[project]
+name = "t2d-worker"
+version = "0.1.0"
+description = "t2d agent worker: task queue consumer, three agents, nine tools"
+requires-python = ">=3.12"
+dependencies = [
+  "t2d-db",
+  "agent-adapter",
+  "cloud-adapters",
+  "semantic",
+  "query-gateway",
+  "dashboard-schema",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["t2d_worker*"]

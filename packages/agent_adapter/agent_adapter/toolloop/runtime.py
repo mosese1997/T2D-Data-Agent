@@ -9,6 +9,7 @@ enforced locally; exceeding it ends the run with an explained failure.
 from __future__ import annotations
 
 import json
+import time
 
 from ..base import (
     AgentEvent,
@@ -51,6 +52,7 @@ class ToolLoopRuntime(AgentRuntime):
         budget = session.budget
         nudges = NudgeState()
         usage_total: dict[str, int] = {}
+        tool_results: dict[str, dict] = {}
         tool_calls_used = 0
         messages = [ {"role": "system", "content": session.system_prompt},
                      *session.messages ]
@@ -62,7 +64,7 @@ class ToolLoopRuntime(AgentRuntime):
             if cancel.cancelled:
                 sink(AgentEvent("cancelled", {"agent": session.agent_name, "at_step": step}))
                 return AgentResult(status="cancelled", steps=step - 1,
-                                   tool_calls=tool_calls_used, token_usage=usage_total)
+                                   tool_calls=tool_calls_used, token_usage=usage_total, tool_results=tool_results)
 
             response: LLMResponse = await self.client.chat(
                 model=model, messages=messages, tools=tool_schemas or None
@@ -75,6 +77,7 @@ class ToolLoopRuntime(AgentRuntime):
                     status="failed",
                     error=BudgetExceeded("模型 token").as_payload(),
                     steps=step, tool_calls=tool_calls_used, token_usage=usage_total,
+                    tool_results=tool_results,
                 )
 
             # ── tool calls ────────────────────────────────────────────
@@ -100,10 +103,12 @@ class ToolLoopRuntime(AgentRuntime):
                             error=BudgetExceeded("工具调用次数").as_payload(),
                             steps=step, tool_calls=tool_calls_used - 1,
                             token_usage=usage_total,
+                            tool_results=tool_results,
                         )
                     result_payload = await self._execute_tool(
                         session, sink, cancel, tc
                     )
+                    tool_results[tc["name"]] = result_payload
                     messages.append({
                         "role": "tool",
                         "tool_call_id": tc["id"],
@@ -125,6 +130,7 @@ class ToolLoopRuntime(AgentRuntime):
                     error={"code": "empty_response",
                            "message": "模型连续返回空结果且重试预算用尽"},
                     steps=step, tool_calls=tool_calls_used, token_usage=usage_total,
+                    tool_results=tool_results,
                 )
 
             # Final answer.
@@ -140,6 +146,7 @@ class ToolLoopRuntime(AgentRuntime):
                 steps=step,
                 tool_calls=tool_calls_used,
                 token_usage=usage_total,
+                tool_results=tool_results,
             )
 
         sink(AgentEvent("error", {"code": "budget_exceeded", "what": "steps"}))
@@ -147,6 +154,7 @@ class ToolLoopRuntime(AgentRuntime):
             status="failed",
             error=BudgetExceeded("推理步数").as_payload(),
             steps=budget.max_steps, tool_calls=tool_calls_used, token_usage=usage_total,
+            tool_results=tool_results,
         )
 
     async def _execute_tool(
@@ -175,16 +183,23 @@ class ToolLoopRuntime(AgentRuntime):
                               "retryable": True}}
 
         sink(AgentEvent("tool_call", {"agent": session.agent_name, "tool": tool.name}))
+        started = time.monotonic()
         try:
             # ToolContext comes from the session (built server-side from the
             # task row) — never from model-supplied arguments.
             result = await tool.handler(session_ctx(session), args)
             summary = result.get("_summary") or "完成"
             payload = {k: v for k, v in result.items() if k != "_summary"}
+            latency_ms = int((time.monotonic() - started) * 1000)
+            if session.trace_hook:
+                session.trace_hook(tool.name, args, payload, latency_ms, "ok")
             sink(AgentEvent("tool_result", {"agent": session.agent_name,
                                             "tool": tool.name, "summary": summary}))
             return payload
         except ToolError as exc:
+            latency_ms = int((time.monotonic() - started) * 1000)
+            if session.trace_hook:
+                session.trace_hook(tool.name, args, None, latency_ms, "error")
             sink(AgentEvent("tool_result", {"agent": session.agent_name,
                                             "tool": tool.name,
                                             "summary": f"失败: {exc.message}"}))

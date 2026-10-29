@@ -7,11 +7,22 @@ never used for tool calls (53-60% streaming truncation, see /root/bug-reports).
 
 from __future__ import annotations
 
+import asyncio
 import os
 from dataclasses import dataclass, field
 from typing import Any
 
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, PermissionDeniedError
+
+# Upstream MaaS runs a flaky content-moderation pre-filter that sometimes
+# false-positives on innocuous business SQL ("May contain sensitive
+# information, please try again"). It is a soft reject: retrying usually
+# passes. Hard 403s (bad key) are NOT retried.
+MODERATION_MAX_RETRIES = 2
+
+
+def _is_moderation_false_positive(exc: Exception) -> bool:
+    return isinstance(exc, PermissionDeniedError) and "sensitive" in str(exc).lower()
 
 
 @dataclass
@@ -57,7 +68,17 @@ class LLMClient:
             kwargs["tool_choice"] = "auto"
         if max_tokens:
             kwargs["max_tokens"] = max_tokens
-        resp = await self._client.chat.completions.create(**kwargs)
+        resp = None
+        for attempt in range(MODERATION_MAX_RETRIES + 1):
+            try:
+                resp = await self._client.chat.completions.create(**kwargs)
+                break
+            except PermissionDeniedError as exc:
+                if not _is_moderation_false_positive(exc):
+                    raise
+                if attempt == MODERATION_MAX_RETRIES:
+                    raise
+                await asyncio.sleep(1.0 + attempt)
         choice = resp.choices[0]
         message = choice.message
         tool_calls: list[dict[str, Any]] = []

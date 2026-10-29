@@ -11,16 +11,22 @@ import urllib.request
 
 from fastapi import FastAPI
 
-from .routers import auth, dashboards, files, workspaces
+from .routers import auth, conversations, dashboards, files, patches, sources, tasks, workspaces
 from .settings import settings
 
 
 def _litellm_reachable() -> bool:
     base = settings.model_api_base.rstrip("/")
+    key = os.environ.get("MODEL_API_KEY", "")
     try:
         req = urllib.request.Request(f"{base}/models", method="GET")
+        if key:
+            req.add_header("Authorization", f"Bearer {key}")
         with urllib.request.urlopen(req, timeout=3) as resp:
             return resp.status == 200
+    except urllib.error.HTTPError as exc:
+        # 401/403 means the endpoint is alive (probe just lacks auth scope).
+        return exc.code in (401, 403)
     except Exception:
         return False
 
@@ -44,6 +50,10 @@ def create_app() -> FastAPI:
     app.include_router(workspaces.router)
     app.include_router(dashboards.router)
     app.include_router(files.router)
+    app.include_router(conversations.router)
+    app.include_router(tasks.router)
+    app.include_router(patches.router)
+    app.include_router(sources.router)
 
     @app.get("/api/healthz", tags=["ops"])
     def healthz():

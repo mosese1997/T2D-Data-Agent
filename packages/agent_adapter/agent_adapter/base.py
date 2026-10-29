@@ -104,6 +104,8 @@ class CancelToken:
 
 
 EventSink = Callable[[AgentEvent], None]
+TraceHook = Callable[[str, dict, dict | None, int, str], None]
+# (tool_name, input_args, output_payload | None, latency_ms, status)
 
 
 @dataclass
@@ -120,6 +122,9 @@ class AgentSession:
     budget: Budget = field(default_factory=Budget)
     expect_structured: bool = False  # sub-agents return structured payloads
     parent_run_id: int | None = None
+    # Trace detail (tool_calls rows for the admin Trace page). Raw inputs/
+    # outputs go HERE, never into event_sink (SSE carries summaries only).
+    trace_hook: TraceHook | None = None
 
 
 @dataclass
@@ -131,6 +136,9 @@ class AgentResult:
     steps: int = 0
     tool_calls: int = 0
     error: dict[str, Any] | None = None
+    # Last result per tool name — the runner reads source_id / patch_id from
+    # here instead of trusting the model to echo them back.
+    tool_results: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 @dataclass
