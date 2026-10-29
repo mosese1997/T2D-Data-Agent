@@ -37,7 +37,8 @@ class Dashboard(Base, CreatedAtMixin, UpdatedAtMixin):
     workspace_id: Mapped[int] = bigint_fk("workspaces.id")
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     current_version_id: Mapped[int | None] = bigint_fk(
-        "dashboard_versions.id", nullable=True
+        "dashboard_versions.id", nullable=True,
+        name="fk_dashboards_current_version", use_alter=True,
     )
     status: Mapped[str] = str32(default="draft")  # draft | published | archived
     created_by: Mapped[int] = bigint_fk("users.id")

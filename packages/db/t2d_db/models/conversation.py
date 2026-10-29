@@ -16,7 +16,10 @@ class Conversation(Base, CreatedAtMixin):
     id: Mapped[int] = big_int_pk()
     workspace_id: Mapped[int] = bigint_fk("workspaces.id")
     user_id: Mapped[int] = bigint_fk("users.id")
-    dashboard_id: Mapped[int | None] = bigint_fk("dashboards.id", nullable=True)
+    dashboard_id: Mapped[int | None] = bigint_fk(
+        "dashboards.id", nullable=True,
+        name="fk_conversations_dashboard", use_alter=True,
+    )
     title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[str] = str32(default="active")  # active | archived
 

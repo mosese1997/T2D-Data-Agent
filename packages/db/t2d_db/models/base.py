@@ -30,11 +30,20 @@ def big_int_pk() -> Mapped[int]:
     )
 
 
-def bigint_fk(target: str, *, nullable: bool = False) -> Mapped[int]:
-    """BigInteger foreign key (Integer variant on SQLite)."""
+def bigint_fk(
+    target: str, *, nullable: bool = False, name: str | None = None,
+    use_alter: bool = False,
+) -> Mapped[int]:
+    """BigInteger foreign key (Integer variant on SQLite).
+
+    use_alter=True defers the FK to a post-create ALTER TABLE — required
+    for nullable back-references that would otherwise form FK cycles
+    (MySQL checks referenced tables at CREATE time; see boundaries/notes).
+    """
+    fk = ForeignKey(target, name=name, use_alter=use_alter)
     return mapped_column(
         BigInteger().with_variant(Integer(), "sqlite"),
-        ForeignKey(target),
+        fk,
         nullable=nullable,
     )
 
