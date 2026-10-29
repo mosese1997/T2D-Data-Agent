@@ -73,8 +73,8 @@ datasets:
     primary_key: country_code
     description: 国家维表
     columns:
-      country_code: 国家代码
-      country_name: 国家名称
+      country_code: 国家代码 (MX/CO/BR/AR/CL/PE/UY/EC/BO/PA)
+      country_name: 国家名称——存英文值 Mexico/Colombia/Brazil/Argentina/Chile/Peru/Uruguay/Ecuador/Bolivia/Panama；用户用中文说国家时必须映射（哥伦比亚→Colombia、墨西哥→Mexico、巴西→Brazil、阿根廷→Argentina、智利→Chile、秘鲁→Peru、乌拉圭→Uruguay、厄瓜多尔→Ecuador、玻利维亚→Bolivia、巴拿马→Panama），或直接用 country_code 过滤
       currency: 币种
       business_timezone: 业务时区
   dim_city:

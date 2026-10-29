@@ -60,6 +60,15 @@ def build_semantics_tools(ctx: ToolContext, deps) -> list[Tool]:
         if not visible:
             raise ToolError("permission_denied", "当前业务空间没有可用的授权数据集")
         schema = deps.warehouse.authorized_schema(visible)
+        # Merge the semantic layer's column documentation (value domains,
+        # mappings — e.g. dim_country stores ENGLISH names) over the raw DB
+        # comments: the model needs value hints, not just column names.
+        yaml_datasets = deps.registry.bundle.datasets
+        for name, meta in schema.items():
+            doc = yaml_datasets.get(name, {}).get("columns", {})
+            for column in meta["columns"]:
+                if column["name"] in doc:
+                    column["comment"] = doc[column["name"]]
         return {"datasets": schema, "demo_mode": c.demo_mode,
                 "_summary": f"返回 {len(schema)} 个数据集结构"}
 
