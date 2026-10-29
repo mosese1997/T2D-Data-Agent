@@ -9,7 +9,9 @@ bindings never break.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
+from croniter import croniter
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -59,9 +61,12 @@ def create_schedule(dashboard_id: int, body: ScheduleRequest,
         dashboard_id=dashboard_id, cron=body.cron, enabled=True,
         created_by=user.id,
     )
+    # Prime next_run_at here so the worker's scheduler picks it up.
+    schedule.next_run_at = croniter(body.cron, utcnow()).get_next(datetime)
     db.add(schedule)
     db.commit()
-    return {"id": schedule.id, "cron": schedule.cron, "enabled": True}
+    return {"id": schedule.id, "cron": schedule.cron, "enabled": True,
+            "next_run_at": schedule.next_run_at.isoformat() if schedule.next_run_at else None}
 
 
 @router.get("/{dashboard_id}/refresh-schedules")

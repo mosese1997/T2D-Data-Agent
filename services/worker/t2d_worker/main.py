@@ -19,6 +19,7 @@ from t2d_db.session import utcnow
 
 from .deps import build_deps
 from .runner import TaskRunner
+from .scheduler import POLL_INTERVAL_S, poll_refresh_schedules
 
 WORKER_ID = f"worker-{os.getpid()}"
 ANALYSIS_CONCURRENCY = int(os.environ.get("TASK_ANALYSIS_CONCURRENCY", "2"))
@@ -83,6 +84,7 @@ async def main() -> None:
           f"model={os.environ.get('MODEL_NAME', '?')}", flush=True)
 
     last_reap = 0.0
+    last_refresh_poll = 0.0
     try:
         while True:
             now = time.monotonic()
@@ -91,6 +93,14 @@ async def main() -> None:
                 for tid in reaped:
                     print(f"[worker] reaped expired task {tid}", flush=True)
                 last_reap = now
+            if now - last_refresh_poll > POLL_INTERVAL_S:
+                try:
+                    n = poll_refresh_schedules()
+                    if n:
+                        print(f"[worker] scheduler enqueued {n} refresh task(s)", flush=True)
+                except Exception as exc:  # noqa: BLE001 — scheduling must not kill the loop
+                    print(f"[worker] refresh poll failed: {exc}", flush=True)
+                last_refresh_poll = now
             claim = queue.claim_next(WORKER_ID)
             if claim.claimed:
                 print(f"[worker] claimed task {claim.task_id}", flush=True)

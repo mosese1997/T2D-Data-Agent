@@ -11,6 +11,7 @@ dependencies = [
   "query-gateway",
   "dashboard-schema",
   "opensandbox>=1.2,<2",
+  "croniter>=3.0,<10",
 ]
 
 [build-system]
