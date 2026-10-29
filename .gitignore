@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+apps/web/dist/
+apps/web/node_modules/
+
+# Secrets & local config — never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Runtime data
+data/
+var/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+
+# Reports & artifacts (regenerable)
+evals/reports/
+docs/phase-notes/*.bak
+logs/
+*.log
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

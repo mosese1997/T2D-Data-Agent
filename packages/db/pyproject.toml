@@ -1,0 +1,17 @@
+[project]
+name = "t2d-db"
+version = "0.1.0"
+description = "t2d state database: ORM models, migrations, task queue primitives"
+requires-python = ">=3.12"
+dependencies = [
+  "sqlalchemy>=2.0.36,<3",
+  "alembic>=1.14.0,<2",
+  "pydantic>=2.10,<3",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["t2d_db*"]
