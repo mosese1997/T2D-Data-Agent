@@ -24,9 +24,18 @@
 
 **决策（阶段 1 决策门）**：SwarmFlow 探测 **GO**。落地顺序：toolloop 为默认实现先行（阶段 3 端到端用它跑通）；swarmflow 适配器（swarmflow/runtime.py）在阶段 3 主链路稳定后接入，通过同一集成测试后可配置切换。两实现只依赖同一 AgentSession 契约。
 
-### 沙箱（OpenSandbox 1.2.0）
+### 沙箱（OpenSandbox 1.2.0，SDK 与 Server 同版本）
 
-（待 opensandbox-probe.md 完成后回填：生命周期/资源限制/超时/网络隔离/清理/冷启动延迟。）
+| 能力 | 结论 | 证据 |
+|---|---|---|
+| 生命周期 create→run→write→run→read→destroy | ✅ 实测 | destroy 后 docker ps -a 零残留（label opensandbox.io/id） |
+| 资源限制 | ✅ 实测 | create 参数 resource={"cpu":"1","memory":"1Gi"} → docker NanoCpus=1e9/Memory=1GiB；2GiB 分配 1.17s 被 OOM kill（沙箱存活）；2 线程烧 4s 墙钟 process_time=3.99s（严格 1 vCPU） |
+| 命令超时与取消 | ✅ 实测 | RunCommandOpts(timeout=5) 对 sleep 60 → 6s 被杀、沙箱仍可用；commands.interrupt() 2.06s 终止后台命令 |
+| 网络隔离 | ⚠️ **opt-in，默认放通** | 不传 network_policy 时 pypi/宿主网关/裸 IP 全通；显式 NetworkPolicy(default_action="deny") 后全拦（egress sidecar 同 netns） |
+| 文件/凭据边界 | ✅ 实测 | 沙箱间文件不互通；所有沙箱 Mounts=[]（零宿主挂载）；默认零 env 注入 |
+| 异常清理 | ✅ 实测 | kill -9 server 后容器存活；重启按 label 收养并重建 TTL 定时器；孤儿 sidecar 有清理路径 |
+| 鉴权 | ✅ 实测 | server.api_key + header OPEN-SANDBOX-API-KEY；无/错 key 401 |
+| 冷启动延迟 | 实测数字 | 冷 5.08s / 暖 2.0–2.8s；每命令固定 ~1s 开销；destroy 1.35s；TTL 最小 60s（server 强制） |
 
 ## 2. 已知限制
 
@@ -44,8 +53,12 @@
 - human()/human_session() 需团队 messager 渠道——t2d 不适用，澄清走 toolloop 的 clarification 事件或宿主层实现。
 - 早期版本（0.2.x）：所有接口经 agent_adapter 边界层隔离，禁止上层直接 import openjiuwen。
 
-### 沙箱
-（待回填）
+### 沙箱（OpenSandbox）
+- **禁网是 opt-in**：默认完全放通出网。t2d 适配层（run_isolated）必须每次显式传 NetworkPolicy(default_action="deny")——漏传即裸奔。
+- 禁网沙箱内不能 pip install：pandas/numpy 等依赖必须预烧进 t2d 专用沙箱镜像（基于 python:3.12-slim）。
+- 沙箱 TTL 最小 60s（server 422 强制）；t2d 设 TTL 10 分钟兜底 + finally destroy。
+- 每命令 ~1s 固定开销：批量小命令应合并为单脚本执行。
+- egress.mode 可升级 dns+nft（首版不需要）。
 
 ## 3. 事件映射（丢弃项记录）
 
@@ -70,4 +83,8 @@ toolloop 事件（AgentEvent）→ SSE 映射见 events.py SSE_EVENT_MAP，无�
 4. 升级后 model_copy 注入模式失效且无替代 —— 持续观察项。
 5. swarmflow 适配器未通过 toolloop 的同一集成测试 —— 阶段 3 验证项。
 
-**OpenSandbox → docker 直跑适配层**（待探测结论回填触发条件：资源限制不可配 / 清理不可靠等）。
+**OpenSandbox → docker 直跑适配层**（任一即触发，当前均未触发）：
+1. 资源限制不可配或无效 —— 已排除（实测 NanoCpus/Memory 生效 + OOM 行为正确）。
+2. 禁网策略不可用或不生效 —— 已排除（deny 实测全拦；但注意 opt-in 语义，适配层强制显式传参）。
+3. destroy 后容器残留 / 崩溃后清理不可靠 —— 已排除（零残留 + server 重启收养机制实测）。
+4. 升级后 SDK 接口变动 —— 持续观察项（1.2.0 锁定版本）。

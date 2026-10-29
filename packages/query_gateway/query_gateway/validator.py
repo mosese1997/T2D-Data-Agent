@@ -86,12 +86,16 @@ def validate_sql(sql: str, *, allowed_objects: set[str]) -> ValidationResult:
                 "message": f"检测到禁止的语句类型: {node.key}",
             }])
 
-    # Referenced objects.
+    # Referenced objects. CTE names defined in the WITH clause are not
+    # warehouse objects — exclude them from the whitelist check.
+    cte_names = {cte.alias_or_name.lower() for cte in tree.find_all(exp.CTE)}
     referenced: list[str] = []
     for table in tree.find_all(exp.Table):
         catalog = table.catalog or ""
         schema = (table.db or "").lower()
         name = (table.name or "").lower()
+        if name in cte_names:
+            continue
         if catalog:
             errors.append({
                 "code": "catalog_reference",
