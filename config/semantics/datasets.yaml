@@ -1,0 +1,103 @@
+# 数据集定义 — 业务仓库（DWS 职责，演示模式为本地 Postgres）
+# semantic_version 变更意味着口径变化：检索索引需重建，已发布看板引用旧版本。
+semantic_version: "1"
+
+datasets:
+  orders:
+    grain: order
+    primary_key: order_id
+    time_field: created_at
+    description: 订单主表，一单一行
+    columns:
+      order_id: 订单ID
+      user_id: 买家ID
+      country_code: 国家代码 (MX/CO/BR/...)
+      city_id: 城市ID
+      channel_id: 渠道ID
+      created_at: 下单时间 (UTC)
+      status: 订单状态 (completed/cancelled)
+      currency: 当地币种
+      fx_date: 汇率日期（默认=下单日）
+  order_items:
+    grain: item
+    primary_key: item_id
+    time_field: ~
+    description: 订单明细，一件一行；与订单关联会产生行扇出
+    columns:
+      item_id: 明细ID
+      order_id: 订单ID
+      product_id: 商品ID
+      quantity: 数量
+      unit_price: 单价（当地币种）
+      line_amount: 行金额（当地币种，数量×单价）
+  refunds:
+    grain: refund
+    primary_key: refund_id
+    time_field: refunded_at
+    description: 退款记录，一单一行（部分退款记实际金额）
+    columns:
+      refund_id: 退款ID
+      order_id: 订单ID
+      refunded_at: 退款时间
+      refund_amount: 退款金额（当地币种）
+      reason: 退款原因
+  fulfillment_events:
+    grain: event
+    primary_key: event_id
+    time_field: occurred_at
+    description: 履约事件流 created→packed→shipped→delivered，一单多行
+    columns:
+      event_id: 事件ID
+      order_id: 订单ID
+      event_type: 事件类型 (created/packed/shipped/delivered/exception)
+      occurred_at: 事件时间
+      distance_km: 配送距离（仅 delivered 事件有值）
+  dim_country:
+    grain: country
+    primary_key: country_code
+    description: 国家维表
+    columns:
+      country_code: 国家代码
+      country_name: 国家名称
+      currency: 币种
+      business_timezone: 业务时区
+  dim_city:
+    grain: city
+    primary_key: city_id
+    description: 城市维表
+    columns:
+      city_id: 城市ID
+      city_name: 城市名称
+      country_code: 所属国家
+  dim_category:
+    grain: category
+    primary_key: category_id
+    description: 品类维表（两级）
+    columns:
+      category_id: 品类ID
+      category_name: 品类名称
+      parent_category: 上级品类
+  dim_channel:
+    grain: channel
+    primary_key: channel_id
+    description: 渠道维表
+    columns:
+      channel_id: 渠道ID
+      channel_name: 渠道名称 (app/web/marketplace/pos/phone)
+  dim_product:
+    grain: product
+    primary_key: product_id
+    description: 商品维表
+    columns:
+      product_id: 商品ID
+      product_name: 商品名称
+      category_id: 品类ID
+      price: 标价（当地币种）
+  fx_rates:
+    grain: rate
+    primary_key: [currency, rate_date]
+    description: 汇率表（兑 USD）；存在缺失日期，缺失时按就近前一日有效汇率
+    columns:
+      currency: 币种
+      rate_date: 汇率日期
+      rate_to_usd: 兑 USD 汇率

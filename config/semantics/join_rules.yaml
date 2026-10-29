@@ -1,0 +1,59 @@
+# 合法关联规则 — 查询 Sub-agent 只能使用此处声明的关联
+join_rules:
+  - rule_key: orders_to_items
+    left_dataset: orders
+    right_dataset: order_items
+    join_type: inner
+    join_keys: {order_id: order_id}
+    cardinality: "1:N"
+    notes: 明细扇出源；计数类指标必须去重
+  - rule_key: items_to_product
+    left_dataset: order_items
+    right_dataset: dim_product
+    join_type: inner
+    join_keys: {product_id: product_id}
+    cardinality: "N:1"
+  - rule_key: product_to_category
+    left_dataset: dim_product
+    right_dataset: dim_category
+    join_type: left
+    join_keys: {category_id: category_id}
+    cardinality: "N:1"
+  - rule_key: orders_to_country
+    left_dataset: orders
+    right_dataset: dim_country
+    join_type: inner
+    join_keys: {country_code: country_code}
+    cardinality: "N:1"
+  - rule_key: orders_to_city
+    left_dataset: orders
+    right_dataset: dim_city
+    join_type: inner
+    join_keys: {city_id: city_id}
+    cardinality: "N:1"
+  - rule_key: orders_to_channel
+    left_dataset: orders
+    right_dataset: dim_channel
+    join_type: inner
+    join_keys: {channel_id: channel_id}
+    cardinality: "N:1"
+  - rule_key: orders_to_fx
+    left_dataset: orders
+    right_dataset: fx_rates
+    join_type: left
+    join_keys: {currency: currency, fx_date: rate_date}
+    cardinality: "N:1"
+    notes: 汇率缺失日需回退到就近前一有效日（生成 SQL 时用 LATERAL 或窗口处理）
+  - rule_key: refunds_to_orders
+    left_dataset: refunds
+    right_dataset: orders
+    join_type: inner
+    join_keys: {order_id: order_id}
+    cardinality: "N:1"
+  - rule_key: fulfillment_to_orders
+    left_dataset: fulfillment_events
+    right_dataset: orders
+    join_type: inner
+    join_keys: {order_id: order_id}
+    cardinality: "N:1"
+    notes: 一单多事件；只取所需 event_type 过滤后的行

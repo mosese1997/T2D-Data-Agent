@@ -1,0 +1,16 @@
+[project]
+name = "cloud-adapters"
+version = "0.1.0"
+description = "t2d cloud adapters: DWS/CSS/OBS with demo (local) and real implementations"
+requires-python = ">=3.12"
+dependencies = [
+  "pydantic>=2.10,<3",
+  "psycopg[binary]>=3.2,<4",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["cloud_adapters*"]

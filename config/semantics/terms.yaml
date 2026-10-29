@@ -1,0 +1,39 @@
+# 业务术语 — 检索命中后由 Agent 读取权威定义；相似度不决定口径
+terms:
+  - term: GMV
+    aliases: [成交额, 交易额, 销售额]
+    definition: 成交总额。未取消订单的明细行金额之和；跨国家比较必须按订单日汇率折算为 USD。
+    ref_metric: gmv
+  - term: 客单价
+    aliases: [AOV, 平均订单金额]
+    definition: GMV ÷ 订单量。分母为零时显示「—」。
+    ref_metric: avg_order_value
+  - term: 履约
+    aliases: [配送, 送达, 履行]
+    definition: 订单从创建到送达的履约过程，事件流：created→packed→shipped→delivered，异常为 exception。
+    ref_dataset: fulfillment_events
+  - term: 履约时长
+    aliases: [配送时长, 送达时长]
+    definition: delivered 事件时间减订单创建时间，按小时计。
+    ref_metric: fulfillment_duration
+  - term: 退款率
+    aliases: [退货率, 退单率]
+    definition: 有退款记录的订单数 ÷ 订单量（取消单不计入分母）。
+    ref_metric: refund_rate
+  - term: 自然周
+    aliases: [完整周, 上周]
+    definition: 周一起始、周日结束的完整自然周。「上周」指最近一个已结束的自然周，不含本周。
+  - term: 滚动七天
+    aliases: [最近7天, 近7天, 过去一周]
+    definition: 以昨日为终点的滚动 7 天窗口（排除今日不完整数据）。与「上周」（自然周）口径不同，需向用户澄清。
+  - term: 今日排除
+    definition: 当日数据尚不完整，默认所有时间范围排除今日，除非用户明确要求含今日。
+  - term: 去重计数
+    aliases: [去重, distinct]
+    definition: 订单与明细关联会产生行扇出，任何按订单的计数必须 COUNT(DISTINCT order_id)。
+  - term: 汇率折算
+    aliases: [折算, 换算成美元]
+    definition: 跨国家金额汇总按订单日汇率折算为 USD；汇率缺失时取就近前一有效日汇率。
+  - term: 环比
+    aliases: [周环比, 日环比, 上期对比]
+    definition: 与上一可比周期对比（周环比=上一完整自然周）。分母为零显示「—」，不显示无穷大或百分比异常值。

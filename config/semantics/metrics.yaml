@@ -1,0 +1,200 @@
+# 指标定义 — 表达式为基于 base_dataset 的 SQL 片段（别名约定见各指标）。
+# 跨国家金额汇总必须经 fx_rates 折算为 USD（currency_policy: usd_fixed）。
+metrics:
+  - metric_key: gmv
+    name: GMV
+    synonyms: [成交额, 交易额, 销售额, 总销售额, gmv]
+    description: 成交总额：未取消订单的明细行金额之和，跨国家按订单日汇率折算为 USD
+    expression: SUM(oi.line_amount / fx.rate_to_usd)
+    base_dataset: order_items
+    grain: item
+    time_field: o.created_at
+    exclusions: ["o.status != 'cancelled'", "退款不计入扣减（退款额单列）"]
+    currency_policy: usd_fixed
+    fx_date_rule: order_date
+    available_dimensions: [country, city, channel, category, product, day, weekday]
+    allowed_joins: [orders_to_items, items_to_product, product_to_category, orders_to_country, orders_to_channel, orders_to_fx]
+    version: "1"
+    owner: demo
+
+  - metric_key: order_count
+    name: 订单量
+    synonyms: [订单数, 下单量, orders]
+    description: 未取消订单的去重计数（按 order_id 去重，避免明细扇出重复计数）
+    expression: COUNT(DISTINCT o.order_id)
+    base_dataset: orders
+    grain: order
+    time_field: o.created_at
+    exclusions: ["o.status != 'cancelled'"]
+    currency_policy: local
+    available_dimensions: [country, city, channel, day, weekday]
+    allowed_joins: [orders_to_country, orders_to_channel, orders_to_city]
+    version: "1"
+    owner: demo
+
+  - metric_key: avg_order_value
+    name: 客单价
+    synonyms: [AOV, 均单价值, 平均订单金额]
+    description: GMV / 订单量；分母为零时显示「—」
+    expression: SUM(oi.line_amount / fx.rate_to_usd) / NULLIF(COUNT(DISTINCT o.order_id), 0)
+    base_dataset: order_items
+    grain: item
+    time_field: o.created_at
+    exclusions: ["o.status != 'cancelled'"]
+    currency_policy: usd_fixed
+    fx_date_rule: order_date
+    available_dimensions: [country, channel, category, day]
+    allowed_joins: [orders_to_items, orders_to_country, orders_to_fx]
+    version: "1"
+    owner: demo
+
+  - metric_key: item_count
+    name: 商品件数
+    synonyms: [销量, 售出件数, 销售件数]
+    description: 未取消订单的明细数量之和
+    expression: SUM(oi.quantity)
+    base_dataset: order_items
+    grain: item
+    time_field: o.created_at
+    exclusions: ["o.status != 'cancelled'"]
+    currency_policy: local
+    available_dimensions: [country, category, product, channel, day]
+    allowed_joins: [orders_to_items, items_to_product, orders_to_country]
+    version: "1"
+    owner: demo
+
+  - metric_key: refund_amount
+    name: 退款额
+    synonyms: [退款金额, 退单金额]
+    description: 退款记录金额之和，跨国家按订单日汇率折算为 USD
+    expression: SUM(r.refund_amount / fx.rate_to_usd)
+    base_dataset: refunds
+    grain: refund
+    time_field: r.refunded_at
+    exclusions: []
+    currency_policy: usd_fixed
+    fx_date_rule: order_date
+    available_dimensions: [country, reason, day]
+    allowed_joins: [refunds_to_orders, orders_to_country, orders_to_fx]
+    version: "1"
+    owner: demo
+
+  - metric_key: refund_rate
+    name: 退款率
+    synonyms: [退货率, 退单率]
+    description: 退款订单数 / 订单量（按订单去重）；分母为零显示「—」
+    expression: COUNT(DISTINCT r.order_id)::float / NULLIF(COUNT(DISTINCT o.order_id), 0)
+    base_dataset: refunds
+    grain: refund
+    time_field: r.refunded_at
+    exclusions: ["o.status != 'cancelled'（取消单不计入分母）"]
+    currency_policy: local
+    available_dimensions: [country, reason, day]
+    allowed_joins: [refunds_to_orders, orders_to_country]
+    version: "1"
+    owner: demo
+
+  - metric_key: cancel_rate
+    name: 取消率
+    synonyms: [订单取消率]
+    description: 已取消订单数 / 全部订单数；分母为零显示「—」
+    expression: COUNT(DISTINCT CASE WHEN o.status = 'cancelled' THEN o.order_id END)::float / NULLIF(COUNT(DISTINCT o.order_id), 0)
+    base_dataset: orders
+    grain: order
+    time_field: o.created_at
+    exclusions: []
+    currency_policy: local
+    available_dimensions: [country, channel, day]
+    allowed_joins: [orders_to_country, orders_to_channel]
+    version: "1"
+    owner: demo
+
+  - metric_key: active_buyers
+    name: 下单用户数
+    synonyms: [活跃买家, 购买用户数, 下单人数]
+    description: 时间范围内有未取消订单的去重用户数
+    expression: COUNT(DISTINCT o.user_id)
+    base_dataset: orders
+    grain: order
+    time_field: o.created_at
+    exclusions: ["o.status != 'cancelled'"]
+    currency_policy: local
+    available_dimensions: [country, channel, day]
+    allowed_joins: [orders_to_country, orders_to_channel]
+    version: "1"
+    owner: demo
+
+  - metric_key: orders_per_buyer
+    name: 人均订单数
+    synonyms: [人均单量]
+    description: 订单量 / 下单用户数；分母为零显示「—」
+    expression: COUNT(DISTINCT o.order_id)::float / NULLIF(COUNT(DISTINCT o.user_id), 0)
+    base_dataset: orders
+    grain: order
+    time_field: o.created_at
+    exclusions: ["o.status != 'cancelled'"]
+    currency_policy: local
+    available_dimensions: [country, channel, day]
+    allowed_joins: [orders_to_country, orders_to_channel]
+    version: "1"
+    owner: demo
+
+  - metric_key: fulfillment_distance
+    name: 平均履约距离
+    synonyms: [配送距离, 履约距离]
+    description: delivered 事件的平均配送距离（公里）
+    expression: AVG(fe.distance_km)
+    base_dataset: fulfillment_events
+    grain: event
+    time_field: fe.occurred_at
+    exclusions: ["fe.event_type = 'delivered'", "fe.distance_km IS NOT NULL"]
+    currency_policy: local
+    available_dimensions: [country, city, day]
+    allowed_joins: [fulfillment_to_orders, orders_to_country, orders_to_city]
+    version: "1"
+    owner: demo
+
+  - metric_key: fulfillment_duration
+    name: 平均履约时长
+    synonyms: [配送时长, 履约时间, 送达时长]
+    description: delivered 事件时间与订单创建时间的平均间隔（小时）
+    expression: AVG(EXTRACT(EPOCH FROM (fe.occurred_at - o.created_at)) / 3600.0)
+    base_dataset: fulfillment_events
+    grain: event
+    time_field: fe.occurred_at
+    exclusions: ["fe.event_type = 'delivered'"]
+    currency_policy: local
+    available_dimensions: [country, city, channel, day]
+    allowed_joins: [fulfillment_to_orders, orders_to_country, orders_to_channel]
+    version: "1"
+    owner: demo
+
+  - metric_key: on_time_rate
+    name: 准时送达率
+    synonyms: [准时率, 按时送达率]
+    description: 48 小时内送达的订单占比；分母为零显示「—」
+    expression: COUNT(DISTINCT CASE WHEN fe.occurred_at - o.created_at <= interval '48 hours' THEN o.order_id END)::float / NULLIF(COUNT(DISTINCT o.order_id), 0)
+    base_dataset: fulfillment_events
+    grain: event
+    time_field: fe.occurred_at
+    exclusions: ["fe.event_type = 'delivered'", "o.status != 'cancelled'"]
+    currency_policy: local
+    available_dimensions: [country, city, day]
+    allowed_joins: [fulfillment_to_orders, orders_to_country]
+    version: "1"
+    owner: demo
+
+  - metric_key: exception_rate
+    name: 履约异常率
+    synonyms: [异常率, 配送异常率]
+    description: 有 exception 事件的订单占比；分母为零显示「—」
+    expression: COUNT(DISTINCT CASE WHEN fe.event_type = 'exception' THEN fe.order_id END)::float / NULLIF(COUNT(DISTINCT o.order_id), 0)
+    base_dataset: fulfillment_events
+    grain: event
+    time_field: fe.occurred_at
+    exclusions: ["o.status != 'cancelled'"]
+    currency_policy: local
+    available_dimensions: [country, city, day]
+    allowed_joins: [fulfillment_to_orders, orders_to_country]
+    version: "1"
+    owner: demo
