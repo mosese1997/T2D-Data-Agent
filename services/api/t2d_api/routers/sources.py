@@ -37,20 +37,34 @@ def get_source(source_id: int, user: CurrentUser, db: DbDep):
 def get_rows(source_id: int, user: CurrentUser, db: DbDep,
              page: int = 1, size: int = 50):
     source = _source_or_404(db, source_id)
-    get_workspace_role(db, user, source.workspace_id)
+    role = get_workspace_role(db, user, source.workspace_id)
     size = min(max(size, 1), 500)
     page = max(page, 1)
 
     file_ref = db.get(FileRef, source.result_file_id) if source.result_file_id else None
     if file_ref is None:
         raise HTTPException(status_code=404, detail="Source 没有结果文件")
+
+    # Permission-scoped cache (task book §14): key includes user/workspace/
+    # role/dataset scope + file_ref_id (source & refresh version) + params.
+    from ..cache import cache_key, get_result_cache
+    from ..deps import authorized_datasets
+
+    datasets = frozenset(authorized_datasets(db, source.workspace_id))
+    key = cache_key(user_id=user.id, workspace_id=source.workspace_id, role=role,
+                    datasets=datasets, file_ref_id=file_ref.id, page=page, size=size)
+    cache = get_result_cache()
+    cached, hit = cache.get(key)
+    if hit:
+        return cached
+
     from cloud_adapters.files.local_volume import LocalVolumeFileStore
 
     data = LocalVolumeFileStore().get(file_ref.storage_key)
     payload = json.loads(data)
     rows = payload.get("rows", [])
     start = (page - 1) * size
-    return {
+    result = {
         "columns": payload.get("columns", []),
         "rows": rows[start : start + size],
         "row_count": payload.get("row_count", len(rows)),
@@ -58,3 +72,5 @@ def get_rows(source_id: int, user: CurrentUser, db: DbDep,
         "page": page,
         "size": size,
     }
+    cache.put(key, result)
+    return result
