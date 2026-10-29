@@ -66,6 +66,6 @@
 | 4 修改/分享/发布 | verify_phase4 | 20/20 |
 | 5 分析与平台 | verify_phase5 | 17/17（分析→Trace 全链路、非因果表述、诚实 409） |
 | 6 云部署 | verify_phase6 --full | 19/19（compose 构建 + :8080 + SSE 经 Nginx + 真实建板彩排） |
-| 评测套件 | evals full（38 用例） | 基础问数 10/10（100%，门禁 90%）；全量见 evals/reports/ |
+| 评测套件 | evals full（38 用例） | **38/38 全绿**（基础问数 10/10=100%，门禁 90%）；报告 evals/reports/ |
 
 **Agent 能力清单**（用户可对话使用）：数据问答（answer，直答不建板）｜建板/改板（build/simple_modify，候选变更+原子应用+冲突检测）｜对比分析（analysis，沙箱贡献分解，非因果表述）｜澄清（歧义时主动提问）｜多轮上下文｜发布审批｜分享｜刷新。
