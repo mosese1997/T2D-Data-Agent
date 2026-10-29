@@ -43,28 +43,14 @@ python3 scripts/gen_synthetic_data.py --seed 42 --orders 300000 --out data/synth
 # 4. 启动全栈
 cd infra/compose && docker compose up -d --build && cd ../..
 
-# 5. 初始化（迁移已在启动时对空库自动执行；种子需手动）
-export STATE_DB_URL=sqlite:///var/state.db   # 开发机直跑时；容器内路径不同，见下
-# 容器内初始化（推荐）：
-docker exec t2d_api python - <<'EOF'
-import os
-os.environ['STATE_DB_URL'] = 'sqlite:////var/lib/t2d/state.db'
-from alembic import command
-from alembic.config import Config
-cfg = Config('/app/packages/db/alembic.ini')  # 若镜像未含 packages，见"已知限制"
-EOF
+# 5. 初始化（自动）
+# api 容器 entrypoint 会在启动时自动执行：alembic upgrade head → 空库则跑三个种子
+# （演示账号/语义/预置看板）。已实测全新卷一条命令到完整环境；重启幂等安全。
+docker compose logs api | grep entrypoint   # 应看到迁移+种子日志
 ```
 
-> **当前已知限制（诚实声明）**：api/worker 镜像内未打包 Alembic 迁移目录与种子脚本；
-> 首版部署采用"宿主机跑一次初始化、挂载 state.db 卷"的方式：
-> ```bash
-> # 宿主机（开发机）先初始化好 var/state.db 与 var/files，再挂载进容器：
-> #   volumes: t2d_appdata 已挂 /var/lib/t2d —— 把 var/state.db 与 var/files 放入该卷
-> bash scripts/dev_up.sh && python3 scripts/seed_demo_users.py \
->   && python3 scripts/seed_semantics.py && python3 scripts/seed_preset_dashboards.py
-> docker compose -f infra/compose/docker-compose.yml up -d
-> ```
-> 阶段 6 收尾时把迁移+种子并入镜像 entrypoint（见 docs/phase-notes 待办）。
+> 历史说明：首版曾采用"宿主机初始化 + docker cp 注入卷"的临时方式，
+> 已改为镜像 entrypoint 自初始化（见 services/api/docker-entrypoint.sh）。
 
 ```bash
 # 6. 验证

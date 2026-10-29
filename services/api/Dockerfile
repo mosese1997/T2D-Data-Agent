@@ -18,6 +18,12 @@ FROM python:3.12-slim
 WORKDIR /app
 COPY --from=build /install /usr/local
 COPY config /app/config
+# Self-initialization: alembic scripts + seed scripts + entrypoint.
+COPY packages/db/alembic.ini /app/packages/db/alembic.ini
+COPY packages/db/t2d_db/alembic /app/packages/db/t2d_db/alembic
+COPY scripts/seed_demo_users.py scripts/seed_semantics.py scripts/seed_preset_dashboards.py /app/scripts/
+COPY services/api/docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
 ENV APP_DATA_DIR=/var/lib/t2d
 EXPOSE 8001
-CMD ["uvicorn", "t2d_api.main:app", "--host", "0.0.0.0", "--port", "8001"]
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
