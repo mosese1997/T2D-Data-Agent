@@ -57,12 +57,16 @@ def create_schedule(dashboard_id: int, body: ScheduleRequest,
     fields = body.cron.split()
     if len(fields) != 5:
         raise HTTPException(status_code=400, detail="cron 须为 5 段式（分 时 日 月 周）")
+    try:
+        next_run = croniter(body.cron, utcnow()).get_next(datetime)
+    except (ValueError, KeyError) as exc:
+        raise HTTPException(status_code=400, detail=f"cron 表达式无效: {exc}")
     schedule = RefreshSchedule(
         dashboard_id=dashboard_id, cron=body.cron, enabled=True,
         created_by=user.id,
     )
     # Prime next_run_at here so the worker's scheduler picks it up.
-    schedule.next_run_at = croniter(body.cron, utcnow()).get_next(datetime)
+    schedule.next_run_at = next_run
     db.add(schedule)
     db.commit()
     return {"id": schedule.id, "cron": schedule.cron, "enabled": True,

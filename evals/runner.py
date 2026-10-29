@@ -33,6 +33,96 @@ os.environ.setdefault("STATE_DB_URL", "sqlite:///var/state.db")
 API = "http://127.0.0.1:8001"
 CASES_DIR = Path(__file__).parent / "cases"
 
+# ── isolated eval stack ───────────────────────────────────────────
+# Eval runs MUST NOT pollute the demo state DB (they create dashboards/
+# conversations/tasks). --isolated (default for nl/full) boots a dedicated
+# API+worker on :8011/:8012 against a throwaway state DB + data dir.
+EVAL_API_PORT = 8011
+EVAL_STATE_DB = str(ROOT / "var" / "eval-state.db")
+EVAL_DATA_DIR = str(ROOT / "var" / "eval-data")
+
+
+def boot_isolated_stack() -> bool:
+    """Fresh state DB + dedicated API/worker; returns True on success."""
+    import subprocess
+
+    for path in (EVAL_STATE_DB, EVAL_STATE_DB + "-wal", EVAL_STATE_DB + "-shm"):
+        if os.path.exists(path):
+            os.remove(path)
+    env = dict(
+        os.environ,
+        STATE_DB_URL=f"sqlite:///{EVAL_STATE_DB}",
+        APP_DATA_DIR=EVAL_DATA_DIR,
+        API_PORT=str(EVAL_API_PORT),
+        WORKER_HEALTH_PORT="8012",
+    )
+    if not env.get("MODEL_API_KEY", "").startswith("sk-"):
+        # inherit the model key the same way dev_up.sh does
+        try:
+            line = [l for l in open("/root/litellm/.env")
+                    if l.startswith("LITELLM_MASTER_KEY=")][0]
+            env["MODEL_API_KEY"] = line.split("=", 1)[1].strip().strip('"').strip("'")
+            env.setdefault("MODEL_API_BASE", "http://localhost:4000/v1")
+        except (OSError, IndexError):
+            print("❌ 找不到 MODEL_API_KEY（且 /root/litellm/.env 不可读）")
+            return False
+    # migrate + seed users/semantics (presets not needed by eval cases)
+    steps = [
+        ("migrate", [
+            sys.executable, "-c",
+            "from alembic import command; from alembic.config import Config\n"
+            "cfg = Config('packages/db/alembic.ini')\n"
+            "cfg.set_main_option('script_location', 'packages/db/t2d_db/alembic')\n"
+            "cfg.set_main_option('sqlalchemy.url', __import__('os').environ['STATE_DB_URL'])\n"
+            "command.upgrade(cfg, 'head')",
+        ]),
+        ("seed_demo_users.py", [sys.executable, "scripts/seed_demo_users.py"]),
+        ("seed_semantics.py", [sys.executable, "scripts/seed_semantics.py"]),
+    ]
+    for label, cmd in steps:
+        proc = subprocess.run(cmd, env=env, cwd=ROOT,
+                              capture_output=True, text=True)
+        if proc.returncode != 0:
+            print(f"❌ 隔离栈初始化失败（{label}）:\n{proc.stderr[-800:]}")
+            return False
+    procs = [
+        subprocess.Popen(
+            [sys.executable, "-m", "uvicorn", "t2d_api.main:app",
+             "--host", "127.0.0.1", "--port", str(EVAL_API_PORT)],
+            env=env, cwd=ROOT,
+            stdout=open(ROOT / "var" / "eval-api.log", "w"),
+            stderr=subprocess.STDOUT),
+        subprocess.Popen(
+            [sys.executable, "-m", "t2d_worker.main"], env=env, cwd=ROOT,
+            stdout=open(ROOT / "var" / "eval-worker.log", "w"),
+            stderr=subprocess.STDOUT),
+    ]
+    import time as _time
+
+    import urllib.request as _urlreq
+
+    for _ in range(40):
+        try:
+            with _urlreq.urlopen(f"http://127.0.0.1:{EVAL_API_PORT}/api/healthz",
+                                 timeout=2):
+                return True
+        except Exception:
+            _time.sleep(1)
+    for proc in procs:
+        proc.terminate()
+    return False
+
+
+def teardown_isolated_stack() -> None:
+    """Kill the eval API/worker (best effort; leave the DB for inspection)."""
+    import subprocess
+
+    subprocess.run(["bash", "-c",
+                    f"ss -tlnp | grep ':{EVAL_API_PORT}' | grep -oP 'pid=\\K[0-9]+'"
+                    " | xargs -r kill; "
+                    "ss -tlnp | grep ':8012' | grep -oP 'pid=\\K[0-9]+' | xargs -r kill"],
+                   capture_output=True)
+
 PASSWORDS = {
     "admin": "admin-demo-2026", "analyst_a": "analyst-demo-2026",
     "analyst_b": "analyst-demo-2026", "viewer_b": "viewer-demo-2026",
@@ -321,15 +411,32 @@ def main() -> int:
                         choices=["smoke", "nl", "scripted", "full"])
     parser.add_argument("--filter", default=None,
                         help="只跑 id 含该子串的用例（逗号分隔多个）")
+    parser.add_argument("--isolated", action="store_true", default=None,
+                        help="用独立栈跑（nl/full 默认开启），不污染演示库")
+    parser.add_argument("--no-isolated", dest="isolated", action="store_false")
     args = parser.parse_args()
 
-    # services must be up
-    try:
-        with urllib.request.urlopen(f"{API}/api/healthz", timeout=3):
-            pass
-    except Exception:
-        print("❌ 服务未运行（先 bash scripts/dev_up.sh）")
-        return 1
+    # NL cases create dashboards/conversations — run them against a
+    # throwaway stack so the demo DB stays clean.
+    use_isolated = args.isolated
+    if use_isolated is None:
+        use_isolated = args.case_set in ("nl", "full") and not args.filter
+    global API
+    if use_isolated:
+        print("启动隔离评测栈（:8011/:8012，一次性状态库）…")
+        if not boot_isolated_stack():
+            print("❌ 隔离栈启动失败（见 var/eval-api.log）")
+            return 1
+        API = f"http://127.0.0.1:{EVAL_API_PORT}"
+        os.environ["STATE_DB_URL"] = f"sqlite:///{EVAL_STATE_DB}"
+    else:
+        # demo stack must be up
+        try:
+            with urllib.request.urlopen(f"{API}/api/healthz", timeout=3):
+                pass
+        except Exception:
+            print("❌ 服务未运行（先 bash scripts/dev_up.sh）")
+            return 1
 
     cases = load_cases()
     if args.filter:
@@ -343,6 +450,10 @@ def main() -> int:
         cases = [c for c in cases if c["category"] == "scripted"]
 
     print(f"═══ 评测 {args.case_set}：{len(cases)} 用例 ═══")
+    if use_isolated:
+        import atexit
+
+        atexit.register(teardown_isolated_stack)
     results: list[dict] = []
     passed = 0
     started = time.time()
@@ -384,6 +495,31 @@ def main() -> int:
                 status=r["status"], expected={}, actual=r["actual"]))
         s.commit()
         run_id = run.id
+
+    if use_isolated:
+        # Mirror the summary into the DEMO state DB so the admin eval page
+        # shows isolated-run history (task links don't cross DBs — dropped).
+        demo_url = f"sqlite:///{ROOT / 'var' / 'state.db'}"
+        from t2d_db import session as _session_mod
+
+        _session_mod._cached_engine.cache_clear()
+        old_url = os.environ["STATE_DB_URL"]
+        try:
+            os.environ["STATE_DB_URL"] = demo_url
+            with get_sessionmaker()() as s:
+                mirror = EvalRun(
+                    case_set=f"{args.case_set}(isolated)",
+                    summary={"total": total, "passed": passed, "accuracy": accuracy})
+                s.add(mirror)
+                s.flush()
+                for r in results:
+                    s.add(EvalCaseResult(
+                        eval_run_id=mirror.id, case_id=r["case_id"],
+                        status=r["status"], expected={}, actual={}))
+                s.commit()
+        finally:
+            os.environ["STATE_DB_URL"] = old_url
+            _session_mod._cached_engine.cache_clear()
     reports = Path("evals/reports")
     reports.mkdir(exist_ok=True)
     report_path = reports / f"{int(time.time())}-{args.case_set}.json"

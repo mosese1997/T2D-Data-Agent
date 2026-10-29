@@ -32,3 +32,13 @@ export function recordRecent(entry: { workspaceId: number; workspaceName: string
     // 忽略存储失败
   }
 }
+
+/** 看板已不存在（404）时从最近访问中清除，避免死条目残留。 */
+export function removeRecent(dashboardId: number): void {
+  const list = getRecent().filter((e) => e.dashboardId !== dashboardId);
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+  } catch {
+    // 忽略存储失败
+  }
+}

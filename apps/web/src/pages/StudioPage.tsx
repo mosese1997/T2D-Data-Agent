@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api/client';
-import { errorMessage } from '../api/error';
+import { ApiError, errorMessage } from '../api/error';
 import type { ApplyPatchResponse, Dashboard } from '../api/types';
 import { useWorkspaces } from '../hooks/useWorkspaces';
-import { recordRecent } from '../stores/recent';
+import { recordRecent, removeRecent } from '../stores/recent';
 import DashboardCanvas from '../components/canvas/DashboardCanvas';
 import AgentPanel from '../components/chat/AgentPanel';
 import { ErrorBox, Loading, StatusBadge } from '../components/common/ui';
@@ -33,6 +33,10 @@ export default function StudioPage() {
       setDashboard(d);
       recordRecent({ workspaceId, workspaceName, dashboardId: d.id, title: d.title });
     } catch (e) {
+      if (e instanceof ApiError && e.status === 404) {
+        // 看板已被删除：从"最近访问"清除死条目，避免 Home 页残留
+        removeRecent(dashboardId);
+      }
       setLoadError(errorMessage(e));
     }
   }, [dashboardId, workspaceId, workspaceName]);
