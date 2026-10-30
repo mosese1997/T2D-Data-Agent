@@ -100,12 +100,15 @@ services:
     build:
       context: ../..
       dockerfile: infra/nginx/Dockerfile
+      args:
+        PUBLIC_IP: ${PUBLIC_IP:-101.44.189.191}
     container_name: t2d_nginx
     depends_on:
       - api
     ports:
-      - "8080:8080"   # 唯一公网入口（HTTP 演示环境）
-      - "80:8080"     # 便利映射：浏览器直接 http://<EIP> 可达（免去 :8080 与 https 升级坑）
+      - "8080:8080"   # 原生入口（HTTP 演示环境）
+      - "80:8080"     # 裸 IP 直达（浏览器对无端口 IP 不做激进 https 升级）
+      - "8443:443"    # 自签 HTTPS（443 被宿主 sshd 备用通道占用，改用 8443）
     restart: unless-stopped
 
 volumes:
