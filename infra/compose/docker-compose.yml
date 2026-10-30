@@ -105,6 +105,7 @@ services:
       - api
     ports:
       - "8080:8080"   # 唯一公网入口（HTTP 演示环境）
+      - "80:8080"     # 便利映射：浏览器直接 http://<EIP> 可达（免去 :8080 与 https 升级坑）
     restart: unless-stopped
 
 volumes:
