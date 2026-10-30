@@ -804,11 +804,18 @@ li { margin: 2px 0; }
   color: #fff;
   border-bottom-right-radius: 4px;
 }
+/* 最终回答：绿色答案卡（过程输出不进聊天，聊天气泡即最终回答） */
 .msg-assistant {
   align-self: flex-start;
-  background: #f1f4f9;
-  color: var(--text);
+  background: var(--success-soft);
+  color: #14532d;
+  border: 1px solid #b8e6d2;
   border-bottom-left-radius: 4px;
+  box-shadow: 0 2px 8px rgba(47, 164, 106, 0.1);
+}
+.msg-assistant strong {
+  color: #0d5c37;
+  font-weight: 800;
 }
 
 /* ---- 任务进度 ---- */

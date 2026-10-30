@@ -61,8 +61,17 @@ class TaskRunner:
             queue.emit_event(s, task_id, event_type, phase=phase, data=_jsonable(data))
             s.commit()
 
-    def _sink_for(self, task_id: int, agent_name: str):
+    def _sink_for(self, task_id: int, agent_name: str, *, show_messages: bool = True):
+        """SSE event sink for one agent run.
+
+        show_messages=False for PROCESS agents (intent, query): their final
+        output is internal (intent JSON / source list) and must NOT appear
+        as a chat bubble — only user-facing agents (answer/design/analysis)
+        get their message streamed to the chat.
+        """
         def sink(event: AgentEvent) -> None:
+            if event.type == "message" and not show_messages:
+                return  # process output stays in the trace, not the chat
             mapped = to_sse(event.type, event.data)
             if mapped is None:
                 return
@@ -130,7 +139,8 @@ class TaskRunner:
 
     # ── agent phase driver ─────────────────────────────────────────
     async def _run_agent(self, task_id: int, ctx, cancel, *, agent_name, prompt,
-                         messages, tools, expect_structured=False, budget=None):
+                         messages, tools, expect_structured=False, budget=None,
+                         show_messages=True):
         with self.maker() as s:
             run_row = AgentRun(task_id=task_id, agent_name=agent_name,
                                runtime=self.runtime.name, model=MODEL,
@@ -145,7 +155,7 @@ class TaskRunner:
                 system_prompt=prompt,
                 messages=messages,
                 tools=tools,
-                event_sink=self._sink_for(task_id, agent_name),
+                event_sink=self._sink_for(task_id, agent_name, show_messages=show_messages),
                 cancel_token=cancel,
                 budget=budget or Budget(max_steps=24, max_tool_calls=16),
                 expect_structured=expect_structured,
@@ -290,6 +300,7 @@ class TaskRunner:
                     tools=build_tools_for("main", ctx, self.deps),
                     expect_structured=True,
                     budget=Budget(max_steps=8, max_tool_calls=4),
+                    show_messages=False,  # 意图 JSON 是过程输出，不进聊天
                 )
                 if result.status == "cancelled":
                     self._set_status(task_id, "cancelled")
@@ -354,6 +365,7 @@ class TaskRunner:
                                           cancel_check=lambda: self._cancel_requested(task_id)),
                     expect_structured=True,
                     budget=Budget(max_steps=24, max_tool_calls=14),
+                    show_messages=False,  # Source 列表是过程输出，不进聊天
                 )
                 if qresult.status == "cancelled":
                     self._set_status(task_id, "cancelled")
@@ -405,7 +417,7 @@ class TaskRunner:
                 self._emit(task_id, "phase.completed",
                            {"phase": "answer", "summary": "回答已生成"},
                            phase="answer")
-                self._emit(task_id, "agent.message", {"content": answer})
+                # agent.message 已由 toolloop 经 sink 发出，不再重发（避免双条）
                 self._set_status(task_id, "succeeded", result={
                     "answer": answer,
                     "sources": [s["source_id"] for s in sources_info],
@@ -449,8 +461,7 @@ class TaskRunner:
                            {"phase": "analysis",
                             "summary": run_result.get("_summary", "分析完成")},
                            phase="analysis")
-                self._emit(task_id, "agent.message",
-                           {"content": aresult.content or ""})
+                # agent.message 已由 toolloop 经 sink 发出，不再重发（避免双条）
                 self._set_status(task_id, "succeeded", result={
                     "analysis_id": run_result["analysis_id"],
                     "analysis_type": run_result.get("analysis_type"),

@@ -89,7 +89,11 @@ def build_query_tools(ctx: ToolContext, deps, *, cancel_check=None) -> list[Tool
             "row_count": result.row_count,
             "truncated": result.truncated,
             "execution_ms": result.execution_ms,
-            "_summary": f"执行成功，{result.row_count} 行 × {len(result.columns)} 列",
+            "tables": result.objects_referenced,
+            "_summary": (f"查询了 {('、'.join(result.objects_referenced))}"
+                         f"（{result.row_count} 行）"
+                         if result.objects_referenced
+                         else f"执行成功，{result.row_count} 行"),
         }
 
     async def get_result_metadata(c: ToolContext, args: dict) -> dict:
