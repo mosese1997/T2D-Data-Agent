@@ -2,13 +2,29 @@ import { useMemo } from 'react';
 import type { EChartsOption } from 'echarts';
 import type { CanvasComponent, RowsResponse } from '../../api/types';
 import { useSourceRows } from '../../hooks/useSourceRows';
-import { ErrorBox, Loading } from '../common/ui';
+import { CardSkeleton, EmptyState, ErrorBox } from '../common/ui';
 import EChart from './EChart';
+import { BRAND_COLOR, CHART_BORDER, CHART_GRID, CHART_MUTED } from '../../theme';
 
 function toNumber(v: unknown): number | null {
   if (v === null || v === undefined || v === '') return null;
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
+}
+
+/** 品牌橙渐变面积（仅单系列折线使用）：12% → 0 透明度 */
+function brandAreaGradient() {
+  return {
+    type: 'linear' as const,
+    x: 0,
+    y: 0,
+    x2: 0,
+    y2: 1,
+    colorStops: [
+      { offset: 0, color: 'rgba(240, 116, 31, 0.12)' },
+      { offset: 1, color: 'rgba(240, 116, 31, 0)' },
+    ],
+  };
 }
 
 export function buildChartOption(comp: CanvasComponent, rows: RowsResponse): EChartsOption | null {
@@ -62,22 +78,79 @@ export function buildChartOption(comp: CanvasComponent, rows: RowsResponse): ECh
   if (groups.size === 0) return null;
 
   const stacked = comp.display?.stacked === true;
-  const chartType = comp.type === 'bar_chart' ? 'bar' : 'line';
+  const isBar = comp.type === 'bar_chart';
+  const singleSeries = groups.size === 1;
 
   const option: EChartsOption = {
     animation: true,
-    tooltip: { trigger: 'axis' },
-    legend: comp.display?.legend === false ? undefined : { bottom: 0, type: 'scroll' },
-    grid: { left: 8, right: 16, top: 24, bottom: 36, containLabel: true },
-    xAxis: { type: 'category', data: xValues },
-    yAxis: { type: 'value' },
-    series: Array.from(groups.entries()).map(([name, m]) => ({
-      name,
-      type: chartType,
-      data: xValues.map((xv) => (m.has(xv) ? (m.get(xv) as number | null) : null)),
-      stack: stacked ? 'total' : undefined,
-      emphasis: { focus: 'series' },
-    })),
+    tooltip: {
+      trigger: 'axis',
+      ...(isBar
+        ? {}
+        : {
+            axisPointer: {
+              type: 'cross',
+              lineStyle: { color: CHART_BORDER, width: 1 },
+              crossStyle: { color: CHART_BORDER },
+              label: { backgroundColor: '#fdeedd', color: CHART_MUTED, fontSize: 11 },
+            },
+          }),
+    },
+    // 图例：小圆点 + 灰字，顶部右侧；单系列不需要图例
+    legend:
+      singleSeries || comp.display?.legend === false
+        ? undefined
+        : {
+            top: 0,
+            right: 0,
+            icon: 'circle',
+            itemWidth: 8,
+            itemHeight: 8,
+            itemGap: 14,
+            textStyle: { color: CHART_MUTED, fontSize: 11 },
+          },
+    grid: { left: 8, right: 16, top: 36, bottom: 8, containLabel: true },
+    xAxis: {
+      type: 'category',
+      data: xValues,
+      axisLine: { lineStyle: { color: CHART_BORDER } },
+      axisTick: { show: false },
+      axisLabel: { color: CHART_MUTED, fontSize: 11 },
+    },
+    yAxis: {
+      type: 'value',
+      splitLine: { lineStyle: { color: CHART_GRID, width: 1 } },
+      axisLabel: { color: CHART_MUTED, fontSize: 11 },
+    },
+    series: Array.from(groups.entries()).map(([name, m]) => {
+      const data = xValues.map((xv) => (m.has(xv) ? (m.get(xv) as number | null) : null));
+      if (isBar) {
+        return {
+          name,
+          type: 'bar' as const,
+          data,
+          stack: stacked ? 'total' : undefined,
+          // 柱端 4px 圆角；柱宽自适应但不超过 36px
+          barMaxWidth: 36,
+          itemStyle: { borderRadius: [4, 4, 0, 0] as [number, number, number, number] },
+          emphasis: { focus: 'series' as const },
+        };
+      }
+      return {
+        name,
+        type: 'line' as const,
+        data,
+        stack: stacked ? 'total' : undefined,
+        smooth: 0.2,
+        lineStyle: { width: 2 },
+        symbolSize: 5,
+        symbol: 'circle',
+        // 仅单系列加品牌橙渐变面积；多系列保持纯线
+        color: singleSeries ? BRAND_COLOR : undefined,
+        areaStyle: singleSeries ? { color: brandAreaGradient() } : undefined,
+        emphasis: { focus: 'series' as const },
+      };
+    }),
   };
   return option;
 }
@@ -86,17 +159,26 @@ export default function ChartCard({ comp, compact = false }: { comp: CanvasCompo
   const { rows, error, loading } = useSourceRows(comp.source_id);
   const option = useMemo(() => (rows ? buildChartOption(comp, rows) : null), [comp, rows]);
 
+  const empty = rows && rows.rows.length === 0;
+
   return (
     <div className="card chart-card">
-      {comp.title ? <div className="card-title">{comp.title}</div> : null}
+      {comp.title ? (
+        <div className="card-head">
+          <div className="card-head-title">{comp.title}</div>
+          {rows && !loading ? <div className="card-head-meta">{rows.row_count} 行</div> : null}
+        </div>
+      ) : null}
       {loading ? (
-        <Loading label="取数中…" />
+        <CardSkeleton variant="chart" />
       ) : error ? (
         <ErrorBox message={error} />
+      ) : empty ? (
+        <EmptyState hint="该数据源当前没有返回任何行" />
       ) : option ? (
         <EChart option={option} height={compact ? 180 : 300} />
       ) : (
-        <div className="muted chart-no-data">图表配置缺少可用的字段，无法渲染。</div>
+        <EmptyState hint="图表配置缺少可用的字段，无法渲染" />
       )}
     </div>
   );

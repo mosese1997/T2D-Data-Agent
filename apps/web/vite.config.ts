@@ -2,7 +2,7 @@ import { defineConfig, type ProxyOptions } from 'vite';
 import react from '@vitejs/plugin-react';
 
 const apiProxy: ProxyOptions = {
-  target: 'http://127.0.0.1:8001',
+  target: 'http://127.0.0.1:8080',
   changeOrigin: true,
   // SSE: make sure event-stream responses are never buffered by the dev proxy.
   configure: (proxy) => {

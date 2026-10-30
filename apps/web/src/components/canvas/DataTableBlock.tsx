@@ -1,7 +1,26 @@
-import { useEffect, useState } from 'react';
-import type { CanvasComponent } from '../../api/types';
+import { useEffect, useMemo, useState } from 'react';
+import type { CanvasComponent, RowsResponse } from '../../api/types';
 import { useSourceRows } from '../../hooks/useSourceRows';
-import { ErrorBox, Loading, formatCell } from '../common/ui';
+import { CardSkeleton, EmptyState, ErrorBox, formatCell } from '../common/ui';
+
+/** 判断某列是否为数字列（采样前 50 行的非空值全部可数值化即认定） */
+function isNumericColumn(rows: RowsResponse, idx: number): boolean {
+  let seen = 0;
+  for (const row of rows.rows.slice(0, 50)) {
+    const v = row[idx];
+    if (v === null || v === undefined || v === '') continue;
+    if (typeof v === 'number') {
+      seen++;
+      continue;
+    }
+    if (typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v))) {
+      seen++;
+      continue;
+    }
+    return false; // 出现非数字内容
+  }
+  return seen > 0;
+}
 
 export default function DataTableBlock({ comp, compact = false }: { comp: CanvasComponent; compact?: boolean }) {
   const { rows, error, loading } = useSourceRows(comp.source_id);
@@ -12,13 +31,22 @@ export default function DataTableBlock({ comp, compact = false }: { comp: Canvas
     setPage(1);
   }, [comp.id, pageSize]);
 
+  const numericIdxs = useMemo(() => {
+    if (!rows) return new Set<number>();
+    const s = new Set<number>();
+    rows.columns.forEach((_c, idx) => {
+      if (isNumericColumn(rows, idx)) s.add(idx);
+    });
+    return s;
+  }, [rows]);
+
   let body: React.ReactNode;
   if (loading) {
-    body = <Loading label="取数中…" />;
+    body = <CardSkeleton variant="table" />;
   } else if (error) {
     body = <ErrorBox message={error} />;
   } else if (!rows) {
-    body = <div className="muted">暂无数据</div>;
+    body = <EmptyState />;
   } else {
     const wanted = (comp.columns ?? []).filter((name) => rows.columns.some((rc) => rc.name === name));
     const colNames = wanted.length > 0 ? wanted : rows.columns.map((c) => c.name);
@@ -34,8 +62,10 @@ export default function DataTableBlock({ comp, compact = false }: { comp: Canvas
           <table className="data-table">
             <thead>
               <tr>
-                {colNames.map((n) => (
-                  <th key={n}>{n}</th>
+                {idxs.map((idx, j) => (
+                  <th key={colNames[j]} className={numericIdxs.has(idx) ? 'cell-num' : undefined}>
+                    {colNames[j]}
+                  </th>
                 ))}
               </tr>
             </thead>
@@ -43,14 +73,16 @@ export default function DataTableBlock({ comp, compact = false }: { comp: Canvas
               {slice.map((row, i) => (
                 <tr key={i}>
                   {idxs.map((idx, j) => (
-                    <td key={j}>{formatCell(row[idx])}</td>
+                    <td key={j} className={numericIdxs.has(idx) ? 'cell-num' : undefined}>
+                      {formatCell(row[idx])}
+                    </td>
                   ))}
                 </tr>
               ))}
               {slice.length === 0 && (
                 <tr>
-                  <td colSpan={colNames.length} className="muted">
-                    无数据行
+                  <td colSpan={colNames.length}>
+                    <EmptyState />
                   </td>
                 </tr>
               )}
@@ -82,7 +114,12 @@ export default function DataTableBlock({ comp, compact = false }: { comp: Canvas
 
   return (
     <div className="card data-table-card">
-      {comp.title ? <div className="card-title">{comp.title}</div> : null}
+      {comp.title ? (
+        <div className="card-head">
+          <div className="card-head-title">{comp.title}</div>
+          {rows && !loading ? <div className="card-head-meta">{rows.row_count} 行</div> : null}
+        </div>
+      ) : null}
       {body}
     </div>
   );

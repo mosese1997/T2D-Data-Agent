@@ -13,6 +13,60 @@ export function ErrorBox({ message, children }: { message?: string | null; child
   return <div className="error-box">{children ?? message}</div>;
 }
 
+/** 骨架屏基础块：浅橙 shimmer 动画（见 global.css .skeleton） */
+export function Skeleton({ className = '', style }: { className?: string; style?: React.CSSProperties }) {
+  return <div className={`skeleton ${className}`} style={style} aria-hidden="true" />;
+}
+
+/** 卡片形状的加载骨架：metric / chart / table 三种变体 */
+export function CardSkeleton({ variant }: { variant: 'metric' | 'chart' | 'table' }) {
+  if (variant === 'metric') {
+    return (
+      <div className="skeleton-card" aria-hidden="true">
+        <Skeleton className="skeleton-line" style={{ width: '42%', height: 10 }} />
+        <Skeleton className="skeleton-line" style={{ width: '58%', height: 24 }} />
+        <Skeleton className="skeleton-line" style={{ width: '100%', height: 36 }} />
+      </div>
+    );
+  }
+  if (variant === 'chart') {
+    return (
+      <div className="skeleton-card" aria-hidden="true">
+        <Skeleton className="skeleton-line" style={{ width: '36%', height: 12 }} />
+        <Skeleton style={{ width: '100%', height: '82%', minHeight: 140 }} />
+      </div>
+    );
+  }
+  return (
+    <div className="skeleton-card" aria-hidden="true">
+      <Skeleton className="skeleton-line" style={{ width: '36%', height: 12 }} />
+      <Skeleton className="skeleton-line" style={{ width: '100%', height: 28 }} />
+      <Skeleton className="skeleton-line" style={{ width: '100%', height: 28 }} />
+      <Skeleton className="skeleton-line" style={{ width: '92%', height: 28 }} />
+      <Skeleton className="skeleton-line" style={{ width: '96%', height: 28 }} />
+    </div>
+  );
+}
+
+/** 居中可爱空态：🍊 + 主文案 + 小灰字解释 */
+export function EmptyState({
+  title = '没有查到数据',
+  hint,
+}: {
+  title?: string;
+  hint?: ReactNode;
+}) {
+  return (
+    <div className="empty-state-cute">
+      <div className="empty-state-emoji" aria-hidden="true">
+        🍊
+      </div>
+      <div className="empty-state-title">{title}</div>
+      {hint ? <div className="empty-state-hint">{hint}</div> : null}
+    </div>
+  );
+}
+
 const STATUS_LABELS: Record<string, string> = {
   draft: '草稿',
   published: '已发布',

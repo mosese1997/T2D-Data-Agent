@@ -30,6 +30,25 @@ export function chartTheme(option: Record<string, unknown>): Record<string, unkn
     color: [...CHART_PALETTE],
     textStyle: { color: CHART_TEXT, fontFamily: 'Nunito, sans-serif' },
     grid: { top: 36, right: 16, bottom: 28, left: 48, containLabel: false },
+    // Tremor 式淡色轴：极淡网格线 + 11px 灰色轴文字（调用方可整体覆盖）
+    xAxis: {
+      axisLine: { lineStyle: { color: CHART_BORDER } },
+      axisTick: { show: false },
+      axisLabel: { color: CHART_MUTED, fontSize: 11 },
+    },
+    yAxis: {
+      splitLine: { lineStyle: { color: CHART_GRID, width: 1 } },
+      axisLabel: { color: CHART_MUTED, fontSize: 11 },
+    },
+    legend: {
+      top: 0,
+      right: 0,
+      icon: 'circle',
+      itemWidth: 8,
+      itemHeight: 8,
+      itemGap: 14,
+      textStyle: { color: CHART_MUTED, fontSize: 11 },
+    },
     tooltip: {
       backgroundColor: '#fffdf9',
       borderColor: CHART_BORDER,
@@ -38,7 +57,5 @@ export function chartTheme(option: Record<string, unknown>): Record<string, unkn
       extraCssText: 'border-radius:12px;box-shadow:0 4px 16px rgba(240,116,31,.12);',
     },
     ...option,
-    // 不被调用方覆盖的关键项
-    ...(option.textStyle ? {} : {}),
   };
 }

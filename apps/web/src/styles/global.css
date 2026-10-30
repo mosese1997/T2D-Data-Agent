@@ -172,6 +172,61 @@ li { margin: 2px 0; }
   word-break: break-word;
 }
 
+/* ---- 骨架屏：浅橙 shimmer ---- */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: #fdeedd;
+  border-radius: 8px;
+}
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent);
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+.skeleton-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 2px 0;
+}
+.skeleton-line {
+  flex: none;
+}
+
+/* ---- 居中可爱空态 ---- */
+.empty-state-cute {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 28px 16px;
+  text-align: center;
+}
+.empty-state-emoji {
+  font-size: 30px;
+  line-height: 1;
+  margin-bottom: 6px;
+}
+.empty-state-cute .empty-state-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+.empty-state-cute .empty-state-hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .result-box {
   background: var(--success-soft);
   border: 1px solid #b8e6d2;
@@ -466,7 +521,7 @@ li { margin: 2px 0; }
 .card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 14px;
+  gap: 12px;
 }
 
 .dashboard-card {
@@ -598,38 +653,81 @@ li { margin: 2px 0; }
 /* ---- 画布网格 ---- */
 .canvas-grid {
   display: grid;
-  gap: 14px;
+  gap: 12px;
   align-items: stretch;
 }
 .canvas-cell {
   min-width: 0;
 }
 
+/* 卡片标题区：加粗标题 + 右侧小灰字（行数等） */
+.card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.card-head-title {
+  font-weight: 800;
+  font-size: 14px;
+  color: var(--text);
+}
+.card-head-meta {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* ---- 指标卡（Tremor 式：小灰标签在上，大数字 + 小字单位） ---- */
 .metric-card {
   display: flex;
   flex-direction: column;
   justify-content: center;
   gap: 6px;
-  min-height: 96px;
+  min-height: 108px;
 }
-.metric-title {
+.metric-label {
   font-size: 12px;
   color: var(--muted);
 }
+.metric-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+}
+.metric-value-row {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
 .metric-value {
   font-size: 26px;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: 0.2px;
+  line-height: 1.2;
   font-variant-numeric: tabular-nums;
+}
+.metric-value-empty {
+  color: var(--muted);
+}
+.metric-unit {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.metric-no-data {
+  font-size: 12px;
+  color: var(--muted);
+}
+.metric-sparkline {
+  margin-top: 2px;
 }
 
 .chart-card {
   display: flex;
   flex-direction: column;
-}
-.chart-no-data {
-  padding: 24px 0;
-  text-align: center;
 }
 
 .data-table-card {
@@ -640,7 +738,7 @@ li { margin: 2px 0; }
   overflow: auto;
   max-height: 420px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 12px;
 }
 .data-table {
   width: 100%;
@@ -648,26 +746,35 @@ li { margin: 2px 0; }
   font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
+/* 去掉竖直边框，只留极淡横线 */
 .data-table th,
 .data-table td {
   padding: 7px 12px;
-  text-align: right;
-  border-bottom: 1px solid var(--border);
+  text-align: left;
+  border-bottom: 1px solid #ffeeda;
   white-space: nowrap;
 }
+.data-table tbody tr:last-child td {
+  border-bottom: none;
+}
+/* 数字列右对齐 */
+.data-table th.cell-num,
+.data-table td.cell-num {
+  text-align: right;
+}
+/* 表头：小写、灰色、小字 */
 .data-table th {
-  background: #fff6ec;
+  background: #fffaf3;
   color: var(--muted);
   font-weight: 600;
+  font-size: 12px;
+  text-transform: lowercase;
   position: sticky;
   top: 0;
-}
-.data-table td:first-child,
-.data-table th:first-child {
-  text-align: left;
+  z-index: 1;
 }
 .data-table tbody tr:hover {
-  background: #fff6ec;
+  background: #fff3e2;
 }
 .table-footer {
   display: flex;
