@@ -19,10 +19,21 @@ from t2d_db.models import AgentRun, Dashboard, Task, ToolCall
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
-CONFIG_PATH = Path(os.environ.get(
-    "AGENT_CONFIG_PATH",
-    str(Path(__file__).resolve().parents[4] / "config" / "agent" / "agent_config.yaml"),
-))
+def _find_agent_config() -> Path:
+    env = os.environ.get("AGENT_CONFIG_PATH")
+    if env:
+        return Path(env)
+    here = Path(__file__).resolve()
+    for parent in here.parents:
+        candidate = parent / "config" / "agent" / "agent_config.yaml"
+        if candidate.is_file():
+            return candidate
+    if Path("/app/config/agent/agent_config.yaml").is_file():
+        return Path("/app/config/agent/agent_config.yaml")
+    return here.parents[4] / "config" / "agent" / "agent_config.yaml"
+
+
+CONFIG_PATH = _find_agent_config()
 
 
 def _require_admin(user, db, workspace_id: int | None = None) -> None:
@@ -159,11 +170,8 @@ def knowledge_index(user: CurrentUser, db: DbDep):
     _require_admin(user, db)
     from semantic import load_semantics
 
-    config_dir = os.environ.get(
-        "SEMANTIC_CONFIG_DIR",
-        str(Path(__file__).resolve().parents[4] / "config" / "semantics"),
-    )
-    registry = load_semantics(config_dir)
+    from ..settings import settings
+    registry = load_semantics(settings.semantic_config_dir)
     return {
         "engine": "local-hybrid (demo)" ,
         "semantic_version": registry.version,

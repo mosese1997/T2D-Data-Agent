@@ -94,6 +94,7 @@ def apply(patch_id: int, user: CurrentUser, db: DbDep):
     db.add(version)
     db.flush()
     dashboard.current_version_id = version.id
+    dashboard.title = after.title or dashboard.title  # 画布标题与列表标题同步
     dashboard.updated_at = utcnow()
     patch.status = "applied"
     patch.applied_version_id = version.id

@@ -21,6 +21,10 @@ def _find_semantic_config_dir() -> str:
         candidate = parent / "config" / "semantics"
         if (candidate / "metrics.yaml").is_file():
             return str(candidate)
+    # Container layout: config is COPY'd to /app/config (not a parent of
+    # site-packages) — explicit fallback.
+    if Path("/app/config/semantics/metrics.yaml").is_file():
+        return "/app/config/semantics"
     return "config/semantics"  # let load_semantics surface the error
 
 

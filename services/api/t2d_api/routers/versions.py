@@ -70,6 +70,9 @@ def restore(dashboard_id: int, revision: int, user: CurrentUser, db: DbDep):
     db.add(new_version)
     db.flush()
     dashboard.current_version_id = new_version.id
+    # 恢复的画布标题同步到列表标题（与 apply 一致）
+    from dashboard_schema.canvas import Canvas
+    dashboard.title = Canvas.model_validate(target.canvas_json).title or dashboard.title
     dashboard.updated_at = utcnow()
     db.commit()
     return {
