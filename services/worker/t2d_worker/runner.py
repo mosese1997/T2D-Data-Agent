@@ -44,6 +44,16 @@ def _prompt(name: str) -> str:
     return (PROMPTS_DIR / f"{name}.md").read_text(encoding="utf-8").replace("{brand}", BRAND)
 
 
+def _lang_note(locale: str) -> str:
+    """Language instruction for user-facing agents (answers, titles,
+    caliber notes, change summaries follow the UI language)."""
+    if locale == "en":
+        return ("\n【语言要求】用户界面语言为 English。所有面向用户的文字——最终回答、"
+                "Source 标题、口径说明、组件标题、变更摘要——必须用 English 输出。"
+                "内部 JSON 字段名保持不变。")
+    return ""  # zh 是默认，提示词本身即中文
+
+
 def _jsonable(value):
     """Make DB results (dates, decimals, …) safe for JSON columns."""
     return json.loads(json.dumps(value, ensure_ascii=False, default=str))
@@ -269,6 +279,7 @@ class TaskRunner:
         ctx = context_for_task(task_id)
         cancel = CancelToken()
         user_text = payload.get("content", "")
+        lang_note = _lang_note(payload.get("locale", "zh"))
         dashboard_id = brief["dashboard_id"]
 
         try:
@@ -360,7 +371,7 @@ class TaskRunner:
                 }]
                 qresult = await self._run_agent(
                     task_id, ctx, cancel,
-                    agent_name="query", prompt=_prompt("query"), messages=query_messages,
+                    agent_name="query", prompt=_prompt("query") + lang_note, messages=query_messages,
                     tools=build_tools_for("query", ctx, self.deps,
                                           cancel_check=lambda: self._cancel_requested(task_id)),
                     expect_structured=True,
@@ -406,7 +417,7 @@ class TaskRunner:
                 }]
                 arsult = await self._run_agent(
                     task_id, ctx, cancel,
-                    agent_name="main", prompt=_prompt("main_answer"),
+                    agent_name="main", prompt=_prompt("main_answer") + lang_note,
                     messages=answer_messages, tools=[],
                     budget=Budget(max_steps=4, max_tool_calls=0),
                 )
@@ -440,7 +451,7 @@ class TaskRunner:
                 }]
                 aresult = await self._run_agent(
                     task_id, ctx, cancel,
-                    agent_name="analysis", prompt=_prompt("analysis"),
+                    agent_name="analysis", prompt=_prompt("analysis") + lang_note,
                     messages=analysis_messages,
                     tools=build_tools_for("analysis", ctx, self.deps,
                                           cancel_check=lambda: self._cancel_requested(task_id)),
@@ -487,7 +498,7 @@ class TaskRunner:
                 }]
                 dresult = await self._run_agent(
                     task_id, ctx, cancel,
-                    agent_name="main", prompt=_prompt("main_design"),
+                    agent_name="main", prompt=_prompt("main_design") + lang_note,
                     messages=design_messages,
                     tools=build_tools_for("main", ctx, self.deps),
                     budget=Budget(max_steps=8, max_tool_calls=4),

@@ -33,6 +33,7 @@ class CreateRequest(BaseModel):
 
 class MessageRequest(BaseModel):
     content: str
+    locale: str = "zh"  # zh | en — Agent 面向用户的文字跟随该语言
 
 
 def _conversation_or_404(db, conversation_id: int) -> Conversation:
@@ -98,11 +99,12 @@ def send_message(conversation_id: int, body: MessageRequest, user: CurrentUser, 
     db.add(message)
     db.flush()
 
+    locale = body.locale if body.locale in ("zh", "en") else "zh"
     task = queue.enqueue(
         type="modify_dashboard" if conversation.dashboard_id else "build_dashboard",
         workspace_id=conversation.workspace_id,
         user_id=user.id,
-        payload={"content": content, "message_id": message.id},
+        payload={"content": content, "message_id": message.id, "locale": locale},
         idempotency_key=message_idem,
         conversation_id=conversation_id,
         dashboard_id=conversation.dashboard_id,
