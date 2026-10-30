@@ -1,8 +1,9 @@
 import { useEffect, useRef } from 'react';
 import * as echarts from 'echarts';
 import type { ECharts, EChartsOption } from 'echarts';
+import { chartTheme } from '../../theme';
 
-/** 轻量 ECharts React 封装：init/dispose 生命周期 + 容器尺寸变化自动 resize */
+/** 轻量 ECharts React 封装：init/dispose 生命周期 + 尺寸自适应 + 浅橙主题 */
 export default function EChart({ option, height = 300 }: { option: EChartsOption; height?: number }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<ECharts | null>(null);
@@ -27,7 +28,7 @@ export default function EChart({ option, height = 300 }: { option: EChartsOption
   }, []);
 
   useEffect(() => {
-    chartRef.current?.setOption(option, true);
+    chartRef.current?.setOption(chartTheme(option) as EChartsOption, true);
   }, [option]);
 
   return <div ref={containerRef} style={{ height, width: '100%' }} />;
