@@ -134,11 +134,24 @@ class ToolLoopRuntime(AgentRuntime):
                 )
 
             # Final answer.
-            sink(AgentEvent("message", {"agent": session.agent_name,
-                                        "content": response.content or ""}))
             structured = None
             if session.expect_structured:
                 structured = self._try_parse_structured(response.content or "")
+                # 内容存在但 JSON 解析失败 → 一次修复 nudge（模型常犯：
+                # markdown 代码块包裹、前后缀文字、尾逗号）。
+                if structured is None and nudges.consume():
+                    messages.append({"role": "assistant",
+                                     "content": response.content or ""})
+                    messages.append({
+                        "role": "user",
+                        "content": ("你的上一条输出不是合法的 JSON 对象（或被代码块/文字包裹）。"
+                                    "请重新输出，要求：只输出一个 JSON 对象，"
+                                    "以 { 开头、以 } 结尾，不要 markdown 代码块，"
+                                    "不要任何其他文字。保持字段与此前要求一致。"),
+                    })
+                    continue
+            sink(AgentEvent("message", {"agent": session.agent_name,
+                                        "content": response.content or ""}))
             return AgentResult(
                 status="succeeded",
                 content=response.content,

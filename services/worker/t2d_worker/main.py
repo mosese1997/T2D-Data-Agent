@@ -33,9 +33,18 @@ _heartbeat_at = utcnow().isoformat()
 def _start_health_server() -> None:
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):  # noqa: N802
+            from t2d_db.models import Task
+            from t2d_db.session import get_sessionmaker
+            try:
+                with get_sessionmaker()() as dbs:
+                    queued = dbs.query(Task).filter_by(status="queued").count()
+            except Exception:
+                queued = -1
             body = json.dumps({
                 "status": "ok", "worker": WORKER_ID,
                 "running_tasks": sorted(_running),
+                "queued_tasks": queued,
+                "heartbeat_failures": _hb_failures["count"],
                 "heartbeat_at": _heartbeat_at,
             }).encode()
             self.send_response(200)
@@ -51,14 +60,27 @@ def _start_health_server() -> None:
     threading.Thread(target=server.serve_forever, daemon=True).start()
 
 
+_hb_failures = {"count": 0}
+
+
 async def _heartbeat_loop() -> None:
     global _heartbeat_at
     while True:
+        failed = 0
         for task_id in list(_running):
             try:
                 queue.heartbeat(task_id, WORKER_ID)
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001
+                failed += 1
+                print(f"[worker] ⚠️ heartbeat failed for task {task_id}: {exc}",
+                      flush=True)
+        if failed:
+            _hb_failures["count"] += 1
+            if _hb_failures["count"] >= 3:
+                print(f"[worker] ⚠️⚠️ heartbeat 连续 {_hb_failures['count']} 轮失败——"
+                      f"租约可能过期，任务或被回收器重排（注意双执行风险）", flush=True)
+        else:
+            _hb_failures["count"] = 0
         _heartbeat_at = utcnow().isoformat()
         await asyncio.sleep(HEARTBEAT_S)
 
@@ -101,7 +123,12 @@ async def main() -> None:
                 except Exception as exc:  # noqa: BLE001 — scheduling must not kill the loop
                     print(f"[worker] refresh poll failed: {exc}", flush=True)
                 last_refresh_poll = now
-            claim = queue.claim_next(WORKER_ID)
+            try:
+                claim = queue.claim_next(WORKER_ID)
+            except Exception as exc:  # noqa: BLE001 — 轮询失败绝不杀死 worker
+                print(f"[worker] ⚠️ claim 轮询失败（1s 后重试）: {exc}", flush=True)
+                await asyncio.sleep(1.0)
+                continue
             if claim.claimed:
                 print(f"[worker] claimed task {claim.task_id}", flush=True)
                 asyncio.create_task(_run_claimed(runner, claim.task_id, sem))

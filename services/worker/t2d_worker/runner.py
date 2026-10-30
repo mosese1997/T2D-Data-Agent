@@ -293,9 +293,17 @@ class TaskRunner:
             # 复用旧的 clarify 意图会把空 time_spec 带进查询段（task 36 教训）。
             if checkpoint.get("step") in ("query_executed", "patch_proposed"):
                 intent = checkpoint.get("state", {}).get("intent")
+            # 对话 harness：注入本会话上一个任务的结果状态，让"为什么失败"
+            # 这类指代性问题有据可答；澄清轮数防止无限追问。
+            ctx_note = self._conversation_task_context(brief["conversation_id"], task_id)
+            clarify_rounds = int(payload.get("_clarify_rounds", 0))
+
             if intent is None:
                 self._emit(task_id, "phase.started", {"phase": "intent_parse"}, phase="intent_parse")
                 messages = self._conversation_tail(brief["conversation_id"])
+                if clarify_rounds:
+                    ctx_note += (f"\n（已澄清 {clarify_rounds} 轮。如仍有歧义，"
+                                 "请选择最合理的解释并明确说明假设，不要继续追问。）")
                 # Prefetch semantic hits here — the intent agent doesn't need
                 # a tool round-trip for what the runner can look up directly
                 # (cuts one LLM call per task).
@@ -304,7 +312,8 @@ class TaskRunner:
                     [{"kind": h.kind, "key": h.key, "name": h.name, "score": h.score}
                      for h in hits], ensure_ascii=False)
                 messages.append({"role": "user", "content":
-                                 f"{user_text}\n\n（语义检索结果，按相关度排序）\n{hits_text}"})
+                                 f"{user_text}\n\n（语义检索结果，按相关度排序）\n{hits_text}"
+                                 + (f"\n\n（会话上下文）\n{ctx_note}" if ctx_note else "")})
                 if payload.get("answer"):
                     messages.append({"role": "user", "content": f"（用户补充）{payload['answer']}"})
                 result = await self._run_agent(
@@ -330,6 +339,12 @@ class TaskRunner:
                     self._emit(task_id, "clarification.requested",
                                {"question": intent.get("clarify") or "请补充您的需求"},
                                phase="intent_parse")
+                    with self.maker() as s:
+                        row = s.get(Task, task_id)
+                        p = dict(row.payload or {})
+                        p["_clarify_rounds"] = clarify_rounds + 1
+                        row.payload = p
+                        s.commit()
                     self._set_status(task_id, "waiting_for_user")
                     return
                 self._checkpoint(task_id, "intent_parsed", {"intent": intent})
@@ -428,7 +443,9 @@ class TaskRunner:
                 answer_messages = [{
                     "role": "user",
                     "content": f"用户问题：{user_text}\n\n查询结果（可能为空=没有查到数据或闲聊）：\n"
-                                + json.dumps(answer_context, ensure_ascii=False, default=str),
+                                + json.dumps(answer_context, ensure_ascii=False, default=str)
+                                + (f"\n\n（会话上下文——回答指代性问题如\"为什么失败\"时据此说明）\n{ctx_note}"
+                                   if ctx_note else ""),
                 }]
                 arsult = await self._run_agent(
                     task_id, ctx, cancel,
@@ -566,6 +583,26 @@ class TaskRunner:
                 "code": "runner_error", "message": f"{type(exc).__name__}: {exc}"})
 
     # ── helpers ────────────────────────────────────────────────────
+    def _conversation_task_context(self, conversation_id: int | None,
+                                   current_task_id: int) -> str:
+        """Previous task outcome in this conversation — lets the agent answer
+        referential questions ('为什么失败') with real facts."""
+        if not conversation_id:
+            return ""
+        with self.maker() as s:
+            prev = (
+                s.query(Task)
+                .filter(Task.conversation_id == conversation_id,
+                        Task.id != current_task_id)
+                .order_by(Task.id.desc())
+                .first()
+            )
+            if prev is None:
+                return ""
+            if prev.status == "failed" and prev.error:
+                return (f"上一个任务（#{prev.id}）失败：{prev.error.get('message', '')[:150]}")
+            return f"上一个任务（#{prev.id}）状态：{prev.status}"
+
     def _canvas_summary(self, dashboard_id: int) -> list[dict]:
         """Existing component ids/titles/types — the design agent needs them
         to avoid id collisions (task 34: 'c1 already exists')."""

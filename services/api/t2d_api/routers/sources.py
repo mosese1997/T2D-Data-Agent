@@ -60,9 +60,13 @@ def get_rows(source_id: int, user: CurrentUser, db: DbDep,
     if hit:
         return JSONResponse(content=cached, headers={"X-Cache": "HIT"})
 
+    import hashlib
+
     from cloud_adapters.files.local_volume import LocalVolumeFileStore
 
     data = LocalVolumeFileStore().get(file_ref.storage_key)
+    if hashlib.sha256(data).hexdigest() != file_ref.sha256:
+        raise HTTPException(status_code=503, detail="结果文件校验失败（存储不一致）")
     payload = json.loads(data)
     rows = payload.get("rows", [])
     start = (page - 1) * size

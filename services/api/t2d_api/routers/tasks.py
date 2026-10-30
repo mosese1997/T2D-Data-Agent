@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -73,7 +74,11 @@ async def stream_events(task_id: int, user: CurrentUser, db: DbDep, request: Req
         nonlocal cursor
         maker = get_sessionmaker()
         heartbeat_counter = 0
+        deadline = time.monotonic() + 3600  # 1h 硬上限：防连接泄漏
         while True:
+            if time.monotonic() > deadline:
+                yield ": max-duration-reached\n\n"
+                return
             with maker() as s:
                 events = (
                     s.query(RunEvent)
