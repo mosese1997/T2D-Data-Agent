@@ -61,13 +61,16 @@ function describeResult(result: unknown): string | null {
   if (typeof result === 'string') return result;
   if (typeof result === 'object') {
     const r = result as Record<string, unknown>;
+    // 问答/分析模式：结论已经在聊天气泡（agent.message）里，结果框不重复。
+    if (r.mode === 'answer' && typeof r.answer === 'string') return null;
+    if (r.mode === 'analysis') return null;
     if (typeof r.message === 'string') return r.message;
     if (typeof r.summary === 'string') return r.summary;
-    try {
-      return JSON.stringify(result);
-    } catch {
-      return String(result);
-    }
+    // 其余模式给一句人话——绝不把原始 JSON 甩给用户。
+    if (typeof r.refreshed_sources === 'number') return `已刷新 ${r.refreshed_sources} 个数据源`;
+    if (Array.isArray(r.sources)) return `已生成 ${r.sources.length} 个数据查询结果`;
+    if (r.patch_id != null && r.dashboard_id != null) return '候选变更已生成，请在上方预览中确认应用';
+    return null; // 未知结构宁可不说，也不显示乱码 JSON
   }
   return String(result);
 }
