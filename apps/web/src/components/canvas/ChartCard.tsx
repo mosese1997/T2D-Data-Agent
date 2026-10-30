@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import type { EChartsOption } from 'echarts';
 import type { CanvasComponent, RowsResponse } from '../../api/types';
 import { useSourceRows } from '../../hooks/useSourceRows';
+import { useI18n } from '../../i18n';
 import { CardSkeleton, EmptyState, ErrorBox } from '../common/ui';
 import EChart from './EChart';
 import { BRAND_COLOR, CHART_BORDER, CHART_GRID, CHART_MUTED } from '../../theme';
@@ -157,6 +158,7 @@ export function buildChartOption(comp: CanvasComponent, rows: RowsResponse): ECh
 
 export default function ChartCard({ comp, compact = false }: { comp: CanvasComponent; compact?: boolean }) {
   const { rows, error, loading } = useSourceRows(comp.source_id);
+  const { t } = useI18n();
   const option = useMemo(() => (rows ? buildChartOption(comp, rows) : null), [comp, rows]);
 
   const empty = rows && rows.rows.length === 0;
@@ -166,7 +168,7 @@ export default function ChartCard({ comp, compact = false }: { comp: CanvasCompo
       {comp.title ? (
         <div className="card-head">
           <div className="card-head-title">{comp.title}</div>
-          {rows && !loading ? <div className="card-head-meta">{rows.row_count} 行</div> : null}
+          {rows && !loading ? <div className="card-head-meta">{t('common.rows', { n: rows.row_count })}</div> : null}
         </div>
       ) : null}
       {loading ? (
@@ -174,11 +176,11 @@ export default function ChartCard({ comp, compact = false }: { comp: CanvasCompo
       ) : error ? (
         <ErrorBox message={error} />
       ) : empty ? (
-        <EmptyState hint="该数据源当前没有返回任何行" />
+        <EmptyState hint={t('chart.emptyHint')} />
       ) : option ? (
         <EChart option={option} height={compact ? 180 : 300} />
       ) : (
-        <EmptyState hint="图表配置缺少可用的字段，无法渲染" />
+        <EmptyState hint={t('chart.invalidHint')} />
       )}
     </div>
   );

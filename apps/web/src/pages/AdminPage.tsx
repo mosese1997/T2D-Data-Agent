@@ -4,27 +4,29 @@ import { api } from '../api/client';
 import { errorDetail } from '../api/error';
 import type { AgentBudget, AgentConfigResponse, EvalRunEntry, KnowledgeIndex } from '../api/types';
 import RunsList from '../components/admin/RunsList';
+import { useI18n, tr } from '../i18n';
 import { ErrorBox, Loading, formatDateTime } from '../components/common/ui';
 import { useIsAdmin } from '../hooks/useIsAdmin';
 
 type AdminTab = 'config' | 'knowledge' | 'runs' | 'evals';
 
-const TABS: { key: AdminTab; label: string }[] = [
-  { key: 'config', label: 'Agent 配置' },
-  { key: 'knowledge', label: '知识索引' },
-  { key: 'runs', label: '运行' },
-  { key: 'evals', label: '评测' },
-];
-
 /** 管理台（任务书 §13）：仅管理员可见，非管理员重定向到活动页（那里有权限提示）。 */
 export default function AdminPage() {
   const isAdmin = useIsAdmin();
   const [tab, setTab] = useState<AdminTab>('config');
+  const { t } = useI18n();
+
+  const TABS: { key: AdminTab; label: string }[] = [
+    { key: 'config', label: t('admin.tab.config') },
+    { key: 'knowledge', label: t('admin.tab.knowledge') },
+    { key: 'runs', label: t('admin.tab.runs') },
+    { key: 'evals', label: t('admin.tab.evals') },
+  ];
 
   if (isAdmin === null) {
     return (
       <div className="page">
-        <Loading label="正在确认权限…" />
+        <Loading label={t('activity.checkingPermission')} />
       </div>
     );
   }
@@ -36,20 +38,20 @@ export default function AdminPage() {
     <div className="page">
       <div className="page-head">
         <div>
-          <h1>Agent 管理台</h1>
-          <p className="muted">运行时配置、知识索引、任务运行与评测——全部来自真实后端数据。</p>
+          <h1>{t('admin.title')}</h1>
+          <p className="muted">{t('admin.sub')}</p>
         </div>
       </div>
 
       <nav className="section-tabs">
-        {TABS.map((t) => (
+        {TABS.map((tabItem) => (
           <button
             type="button"
-            key={t.key}
-            className={`tab ${tab === t.key ? 'active' : ''}`}
-            onClick={() => setTab(t.key)}
+            key={tabItem.key}
+            className={`tab ${tab === tabItem.key ? 'active' : ''}`}
+            onClick={() => setTab(tabItem.key)}
           >
-            {t.label}
+            {tabItem.label}
           </button>
         ))}
       </nav>
@@ -64,24 +66,13 @@ export default function AdminPage() {
 
 /* ===================== Agent 配置 ===================== */
 
-const EXTRA_BUDGET_LABELS: Record<string, string> = {
-  max_tokens_per_task: '单任务 token 上限',
-  max_sql_repairs: 'SQL 修复上限',
-  sandbox_timeout_s: '沙箱超时（秒）',
-};
-
-const AGENT_LABELS: Record<string, string> = {
-  main_agent: '主 Agent',
-  query_agent: '查询 Agent',
-  analysis_agent: '分析 Agent',
-};
-
 function formatCapabilityValue(v: unknown): string {
-  if (typeof v === 'boolean') return v ? '是' : '否';
+  if (typeof v === 'boolean') return v ? tr('admin.capability.yes') : tr('admin.capability.no');
   return String(v);
 }
 
 function AgentConfigSection() {
+  const { t } = useI18n();
   const [config, setConfig] = useState<AgentConfigResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [switching, setSwitching] = useState<string | null>(null);
@@ -113,7 +104,7 @@ function AgentConfigSection() {
     setSwitchDone(null);
     try {
       await api.post<{ runtime: string }>('/api/admin/agent-config/runtime', { runtime });
-      setSwitchDone(`运行时已切换为 ${runtime}。`);
+      setSwitchDone(t('admin.runtimeSwitched', { runtime }));
       load();
     } catch (e) {
       // 后端会拒绝未接入的 runtime（409），如实展示原因
@@ -124,7 +115,7 @@ function AgentConfigSection() {
   };
 
   if (error) return <ErrorBox message={error} />;
-  if (config === null) return <Loading label="加载 Agent 配置…" />;
+  if (config === null) return <Loading label={t('admin.loadingConfig')} />;
 
   const agent = config.config.agent;
   const budgets: { key: string; budget: AgentBudget }[] = [
@@ -137,7 +128,7 @@ function AgentConfigSection() {
   return (
     <div className="admin-sections">
       <div className="card">
-        <h3>当前运行时</h3>
+        <h3>{t('admin.currentRuntime')}</h3>
         <div className="kv-list">
           <div className="kv-row">
             <span className="kv-key">runtime</span>
@@ -146,18 +137,18 @@ function AgentConfigSection() {
             </span>
           </div>
           <div className="kv-row">
-            <span className="kv-key">模型</span>
+            <span className="kv-key">{t('admin.model')}</span>
             <span>{agent.model}</span>
           </div>
           <div className="kv-row">
-            <span className="kv-key">采样参数</span>
+            <span className="kv-key">{t('admin.sampling')}</span>
             <span>
               temperature {agent.temperature ?? '—'} · max_tokens {agent.max_tokens ?? '—'}
             </span>
           </div>
         </div>
 
-        <h4>运行时切换</h4>
+        <h4>{t('admin.runtimeSwitch')}</h4>
         <div className="runtime-switch">
           <button
             type="button"
@@ -165,7 +156,7 @@ function AgentConfigSection() {
             disabled={switching !== null || agent.runtime === 'toolloop'}
             onClick={() => void switchRuntime('toolloop')}
           >
-            {agent.runtime === 'toolloop' ? '当前：toolloop' : '切换到 toolloop'}
+            {agent.runtime === 'toolloop' ? t('admin.runtimeCurrent', { runtime: 'toolloop' }) : t('admin.runtimeSwitchTo', { runtime: 'toolloop' })}
           </button>
           <button
             type="button"
@@ -173,36 +164,36 @@ function AgentConfigSection() {
             disabled={switching !== null || agent.runtime === 'swarmflow'}
             onClick={() => void switchRuntime('swarmflow')}
           >
-            {agent.runtime === 'swarmflow' ? '当前：swarmflow' : '切换到 swarmflow'}
+            {agent.runtime === 'swarmflow' ? t('admin.runtimeCurrent', { runtime: 'swarmflow' }) : t('admin.runtimeSwitchTo', { runtime: 'swarmflow' })}
           </button>
-          <span className="muted">swarmflow 适配器尚未接入主链路，切换请求会被后端拒绝（409），原因将如实显示。</span>
+          <span className="muted">{t('admin.swarmflowNote')}</span>
         </div>
-        {switching !== null && <Loading label="正在切换…" />}
+        {switching !== null && <Loading label={t('admin.switching')} />}
         {switchError && <ErrorBox message={switchError} />}
         {switchDone && <div className="result-box">{switchDone}</div>}
       </div>
 
       <div className="card">
-        <h3>Agent 预算</h3>
+        <h3>{t('admin.budgets')}</h3>
         <div className="table-scroll">
           <table className="data-table">
             <thead>
               <tr>
-                <th>Agent</th>
-                <th>Prompt 版本</th>
-                <th>最大步数</th>
-                <th>工具调用上限</th>
-                <th>其他预算</th>
+                <th>{t('admin.th.agent')}</th>
+                <th>{t('admin.th.promptVersion')}</th>
+                <th>{t('admin.th.maxSteps')}</th>
+                <th>{t('admin.th.maxToolCalls')}</th>
+                <th>{t('admin.th.otherBudgets')}</th>
               </tr>
             </thead>
             <tbody>
               {budgets.map(({ key, budget }) => {
                 const extras = Object.entries(budget)
                   .filter(([k]) => !knownBudgetKeys.has(k))
-                  .map(([k, v]) => `${EXTRA_BUDGET_LABELS[k] ?? k}: ${String(v)}`);
+                  .map(([k, v]) => `${t(`admin.budget.${k}`, undefined, k)}: ${String(v)}`);
                 return (
                   <tr key={key}>
-                    <td>{AGENT_LABELS[key] ?? key}</td>
+                    <td>{t(`admin.agent.${key}`, undefined, key)}</td>
                     <td>{budget.prompt_version ?? '—'}</td>
                     <td>{budget.max_steps ?? '—'}</td>
                     <td>{budget.max_tool_calls ?? '—'}</td>
@@ -216,13 +207,13 @@ function AgentConfigSection() {
       </div>
 
       <div className="card">
-        <h3>运行时能力矩阵</h3>
+        <h3>{t('admin.capabilities')}</h3>
         <div className="cap-grid">
           {Object.entries(config.runtime_capabilities).map(([runtime, caps]) => (
             <div className="cap-card" key={runtime}>
               <div className="cap-title">
                 <span className="badge badge-gray">{runtime}</span>
-                {runtime === agent.runtime && <span className="badge badge-green">当前</span>}
+                {runtime === agent.runtime && <span className="badge badge-green">{t('admin.current')}</span>}
               </div>
               <div className="kv-list">
                 {Object.entries(caps).map(([k, v]) => (
@@ -243,6 +234,7 @@ function AgentConfigSection() {
 /* ===================== 知识索引 ===================== */
 
 function KnowledgeIndexSection() {
+  const { t } = useI18n();
   const [index, setIndex] = useState<KnowledgeIndex | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -262,31 +254,31 @@ function KnowledgeIndexSection() {
   }, []);
 
   if (error) return <ErrorBox message={error} />;
-  if (index === null) return <Loading label="加载知识索引状态…" />;
+  if (index === null) return <Loading label={t('admin.knowledge.loading')} />;
 
   return (
     <div className="admin-sections">
       <div className="card">
-        <h3>语义知识索引</h3>
+        <h3>{t('admin.knowledge.title')}</h3>
         <div className="kv-list">
           <div className="kv-row">
-            <span className="kv-key">检索引擎</span>
+            <span className="kv-key">{t('admin.knowledge.engine')}</span>
             <span>{index.engine}</span>
           </div>
           <div className="kv-row">
-            <span className="kv-key">语义版本</span>
+            <span className="kv-key">{t('admin.knowledge.semanticVersion')}</span>
             <span>v{index.semantic_version}</span>
           </div>
           <div className="kv-row">
-            <span className="kv-key">指标数</span>
+            <span className="kv-key">{t('admin.knowledge.metrics')}</span>
             <span>{index.metrics}</span>
           </div>
           <div className="kv-row">
-            <span className="kv-key">术语数</span>
+            <span className="kv-key">{t('admin.knowledge.terms')}</span>
             <span>{index.terms}</span>
           </div>
           <div className="kv-row">
-            <span className="kv-key">关联规则数</span>
+            <span className="kv-key">{t('admin.knowledge.joinRules')}</span>
             <span>{index.join_rules}</span>
           </div>
         </div>
@@ -310,13 +302,8 @@ const EVAL_STATUS_CLASS: Record<string, string> = {
   error: 'badge-red',
 };
 
-const EVAL_STATUS_LABELS: Record<string, string> = {
-  passed: '通过',
-  failed: '未通过',
-  error: '异常',
-};
-
 function EvalsSection() {
+  const { t } = useI18n();
   const [evals, setEvals] = useState<EvalRunEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
@@ -337,13 +324,13 @@ function EvalsSection() {
   }, []);
 
   if (error) return <ErrorBox message={error} />;
-  if (evals === null) return <Loading label="加载评测记录…" />;
+  if (evals === null) return <Loading label={t('admin.evals.loading')} />;
 
   if (evals.length === 0) {
     return (
       <div className="card empty-state">
-        <div className="empty-state-title">暂无评测记录</div>
-        <p className="muted">运行评测套件后，结果会出现在这里。</p>
+        <div className="empty-state-title">{t('admin.evals.empty.title')}</div>
+        <p className="muted">{t('admin.evals.empty.body')}</p>
       </div>
     );
   }
@@ -366,7 +353,7 @@ function EvalsSection() {
               </span>
               <span className="muted">{formatDateTime(run.created_at)}</span>
               <span className="badge badge-blue">
-                通过 {run.summary.passed ?? '—'} / {run.summary.total ?? '—'} · 准确率 {accuracy}
+                {t('admin.evals.summary', { passed: run.summary.passed ?? '—', total: run.summary.total ?? '—', accuracy })}
               </span>
               <span className="caret" aria-hidden="true">
                 {expanded ? '▴' : '▾'}
@@ -374,12 +361,12 @@ function EvalsSection() {
             </button>
             {expanded && (
               <div className="eval-cases">
-                <h4>逐用例结果（{run.cases.length}）</h4>
+                <h4>{t('admin.evals.cases', { n: run.cases.length })}</h4>
                 <div className="eval-case-grid">
                   {run.cases.map((c) => (
                     <span className="eval-case" key={c.case_id}>
                       <span className={`badge ${EVAL_STATUS_CLASS[c.status] ?? 'badge-gray'}`}>
-                        {EVAL_STATUS_LABELS[c.status] ?? c.status}
+                        {t(`admin.eval.${c.status}`, undefined, c.status)}
                       </span>
                       {c.case_id}
                     </span>

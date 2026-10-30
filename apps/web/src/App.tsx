@@ -4,6 +4,7 @@ import { api } from './api/client';
 import type { User } from './api/types';
 import { useAuthStore } from './stores/auth';
 import { useHealthStore } from './stores/health';
+import { useI18n } from './i18n';
 import TopBar from './components/common/TopBar';
 import DemoBanner from './components/common/DemoBanner';
 import { Loading } from './components/common/ui';
@@ -21,10 +22,11 @@ import AdminRunTracePage from './pages/AdminRunTracePage';
 function RequireAuth() {
   const { token, ready } = useAuthStore();
   const location = useLocation();
+  const { t } = useI18n();
   if (!ready) {
     return (
       <div className="page-center">
-        <Loading label="正在恢复会话…" />
+        <Loading label={t('app.restoringSession')} />
       </div>
     );
   }

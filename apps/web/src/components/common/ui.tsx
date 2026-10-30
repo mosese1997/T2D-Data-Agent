@@ -1,10 +1,12 @@
 import type { ReactNode } from 'react';
+import { useI18n, getLocale, tr } from '../../i18n';
 
-export function Loading({ label = '加载中…' }: { label?: string }) {
+export function Loading({ label }: { label?: string }) {
+  const { t } = useI18n();
   return (
     <div className="loading">
       <span className="spinner" aria-hidden="true" />
-      <span>{label}</span>
+      <span>{label ?? t('common.loading')}</span>
     </div>
   );
 }
@@ -50,36 +52,23 @@ export function CardSkeleton({ variant }: { variant: 'metric' | 'chart' | 'table
 
 /** 居中可爱空态：🍊 + 主文案 + 小灰字解释 */
 export function EmptyState({
-  title = '没有查到数据',
+  title,
   hint,
 }: {
   title?: string;
   hint?: ReactNode;
 }) {
+  const { t } = useI18n();
   return (
     <div className="empty-state-cute">
       <div className="empty-state-emoji" aria-hidden="true">
         🍊
       </div>
-      <div className="empty-state-title">{title}</div>
+      <div className="empty-state-title">{title ?? t('empty.noData')}</div>
       {hint ? <div className="empty-state-hint">{hint}</div> : null}
     </div>
   );
 }
-
-const STATUS_LABELS: Record<string, string> = {
-  draft: '草稿',
-  published: '已发布',
-  archived: '已归档',
-  queued: '排队中',
-  running: '运行中',
-  waiting_for_user: '等待补充信息',
-  waiting_for_apply: '待应用',
-  succeeded: '已完成',
-  failed: '失败',
-  cancelled: '已取消',
-  interrupted: '已中断',
-};
 
 const STATUS_CLASS: Record<string, string> = {
   draft: 'badge-gray',
@@ -96,7 +85,8 @@ const STATUS_CLASS: Record<string, string> = {
 };
 
 export function StatusBadge({ status }: { status: string }) {
-  return <span className={`badge ${STATUS_CLASS[status] ?? 'badge-gray'}`}>{STATUS_LABELS[status] ?? status}</span>;
+  const { t } = useI18n(); // 订阅语言变化，切换即时生效
+  return <span className={`badge ${STATUS_CLASS[status] ?? 'badge-gray'}`}>{t(`status.${status}`, undefined, status)}</span>;
 }
 
 /** 任务运行状态配色：succeeded 绿 / failed 红 / queued 灰 / running 蓝 / waiting_* 黄 */
@@ -112,7 +102,8 @@ const RUN_STATUS_CLASS: Record<string, string> = {
 };
 
 export function RunStatusBadge({ status }: { status: string }) {
-  return <span className={`badge ${RUN_STATUS_CLASS[status] ?? 'badge-gray'}`}>{STATUS_LABELS[status] ?? status}</span>;
+  const { t } = useI18n(); // 订阅语言变化，切换即时生效
+  return <span className={`badge ${RUN_STATUS_CLASS[status] ?? 'badge-gray'}`}>{t(`status.${status}`, undefined, status)}</span>;
 }
 
 /** JSON 美化打印；无法序列化时退化为 String() */
@@ -129,18 +120,18 @@ export function formatDateTime(iso: string | null | undefined): string {
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString('zh-CN', { hour12: false });
+  return d.toLocaleString(getLocale() === 'zh' ? 'zh-CN' : 'en-US', { hour12: false });
 }
 
 export function relativeTime(at: number): string {
   const diff = Date.now() - at;
   const minutes = Math.floor(diff / 60_000);
-  if (minutes < 1) return '刚刚';
-  if (minutes < 60) return `${minutes} 分钟前`;
+  if (minutes < 1) return tr('time.justNow');
+  if (minutes < 60) return tr('time.minutesAgo', { n: minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} 小时前`;
+  if (hours < 24) return tr('time.hoursAgo', { n: hours });
   const days = Math.floor(hours / 24);
-  return `${days} 天前`;
+  return tr('time.daysAgo', { n: days });
 }
 
 /** 表格单元格展示：数字做千分位，空值显示 — */

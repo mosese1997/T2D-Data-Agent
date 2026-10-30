@@ -339,6 +339,38 @@ li { margin: 2px 0; }
 .topbar-right {
   display: flex;
   align-items: center;
+  gap: 10px;
+}
+
+/* 语言切换：中 / EN 胶囊按钮组，当前语言橙色高亮 */
+.lang-switch {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px;
+}
+.lang-btn {
+  appearance: none;
+  border: none;
+  background: none;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+  cursor: pointer;
+  color: var(--muted);
+  transition: background 0.15s, color 0.15s;
+}
+.lang-btn:hover {
+  color: var(--text);
+}
+.lang-btn.active {
+  background: var(--primary);
+  color: #fff;
 }
 
 .menu-root {

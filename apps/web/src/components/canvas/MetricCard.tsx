@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import type { EChartsOption } from 'echarts';
 import type { CanvasComponent, CanvasDisplay, RowsResponse } from '../../api/types';
 import { useSourceRows } from '../../hooks/useSourceRows';
+import { useI18n } from '../../i18n';
 import { CardSkeleton, ErrorBox } from '../common/ui';
 import EChart from './EChart';
 import { BRAND_COLOR } from '../../theme';
@@ -121,6 +122,7 @@ function sparklineOption(dates: string[], values: number[]): EChartsOption {
 
 export default function MetricCard({ comp }: { comp: CanvasComponent }) {
   const { rows, error, loading } = useSourceRows(comp.source_id);
+  const { t } = useI18n();
 
   const raw = useMemo(() => {
     if (!rows || !comp.field) return null;
@@ -140,7 +142,7 @@ export default function MetricCard({ comp }: { comp: CanvasComponent }) {
 
   return (
     <div className="card metric-card">
-      <div className="metric-label">{comp.title || '指标'}</div>
+      <div className="metric-label">{comp.title || t('metric.defaultLabel')}</div>
       {loading ? (
         <CardSkeleton variant="metric" />
       ) : error ? (
@@ -158,7 +160,7 @@ export default function MetricCard({ comp }: { comp: CanvasComponent }) {
               <span className="metric-value metric-value-empty">—</span>
             )}
           </div>
-          {!hasValue ? <div className="metric-no-data">无数据</div> : null}
+          {!hasValue ? <div className="metric-no-data">{t('metric.noData')}</div> : null}
           {sparkOption ? (
             <div className="metric-sparkline">
               <EChart option={sparkOption} height={36} />

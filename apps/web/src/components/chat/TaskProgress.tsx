@@ -1,5 +1,6 @@
 import type { PhaseEntry } from './useAgentTask';
 import { StatusBadge } from '../common/ui';
+import { useI18n } from '../../i18n';
 
 interface TaskProgressProps {
   phases: PhaseEntry[];
@@ -9,27 +10,29 @@ interface TaskProgressProps {
 }
 
 export default function TaskProgress({ phases, status, streamState, active }: TaskProgressProps) {
+  const { t } = useI18n();
+
   if (!active && phases.length === 0) return null;
 
   // 等待用户操作的状态必须醒目提示——不能让用户以为还在"进行中"干等。
   const waitingBanner =
     status === 'waiting_for_user'
-      ? '⏸ Agent 在等你回复：请在上方「需要澄清」的问题框里作答，任务才会继续。'
+      ? t('progress.waitingUser')
       : status === 'waiting_for_apply'
-        ? '🔔 候选变更已就绪：请在上方预览卡片中点击「应用修改」，画布才会更新。'
+        ? t('progress.waitingApply')
         : null;
 
   return (
     <div className="task-progress">
       {waitingBanner && <div className="waiting-banner">{waitingBanner}</div>}
       <div className="task-progress-head">
-        <span className="task-progress-title">任务进度</span>
+        <span className="task-progress-title">{t('progress.title')}</span>
         {status && <StatusBadge status={status} />}
       </div>
-      {active && streamState === 'connecting' && <div className="stream-hint">正在连接事件流…</div>}
-      {active && streamState === 'reconnecting' && <div className="stream-hint">连接中断，正在重连并补读事件…</div>}
+      {active && streamState === 'connecting' && <div className="stream-hint">{t('progress.connecting')}</div>}
+      {active && streamState === 'reconnecting' && <div className="stream-hint">{t('progress.reconnecting')}</div>}
       {active && phases.length === 0 && streamState === 'open' && (
-        <div className="stream-hint">已提交，等待 Agent 响应…</div>
+        <div className="stream-hint">{t('progress.submitted')}</div>
       )}
       <div className="phase-list">
         {phases.map((p) => (
@@ -39,7 +42,7 @@ export default function TaskProgress({ phases, status, streamState, active }: Ta
                 {p.status === 'done' ? '✓' : ''}
               </span>
               <span className="phase-label">{p.label}</span>
-              {p.status === 'running' && <span className="muted phase-state">进行中</span>}
+              {p.status === 'running' && <span className="muted phase-state">{t('progress.running')}</span>}
             </div>
             {p.summary && <div className="phase-summary">{p.summary}</div>}
             {p.tools.length > 0 && (

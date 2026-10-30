@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { CanvasComponent, RowsResponse } from '../../api/types';
 import { useSourceRows } from '../../hooks/useSourceRows';
+import { useI18n } from '../../i18n';
 import { CardSkeleton, EmptyState, ErrorBox, formatCell } from '../common/ui';
 
 /** 判断某列是否为数字列（采样前 50 行的非空值全部可数值化即认定） */
@@ -24,6 +25,7 @@ function isNumericColumn(rows: RowsResponse, idx: number): boolean {
 
 export default function DataTableBlock({ comp, compact = false }: { comp: CanvasComponent; compact?: boolean }) {
   const { rows, error, loading } = useSourceRows(comp.source_id);
+  const { t } = useI18n();
   const [page, setPage] = useState(1);
   const pageSize = (compact ? Math.min(comp.display?.page_size ?? 10, 10) : comp.display?.page_size) ?? 20;
 
@@ -90,13 +92,13 @@ export default function DataTableBlock({ comp, compact = false }: { comp: Canvas
           </table>
         </div>
         <div className="table-footer">
-          <span className="muted">共 {rows.row_count} 行</span>
+          <span className="muted">{t('table.totalRows', { n: rows.row_count })}</span>
           <span className="table-pager">
             <button type="button" className="btn btn-ghost btn-sm" disabled={safePage <= 1} onClick={() => setPage(safePage - 1)}>
-              上一页
+              {t('table.prevPage')}
             </button>
             <span className="muted">
-              第 {safePage} / {totalPages} 页
+              {t('table.pageIndicator', { page: safePage, total: totalPages })}
             </span>
             <button
               type="button"
@@ -104,7 +106,7 @@ export default function DataTableBlock({ comp, compact = false }: { comp: Canvas
               disabled={safePage >= totalPages}
               onClick={() => setPage(safePage + 1)}
             >
-              下一页
+              {t('table.nextPage')}
             </button>
           </span>
         </div>
@@ -117,7 +119,7 @@ export default function DataTableBlock({ comp, compact = false }: { comp: Canvas
       {comp.title ? (
         <div className="card-head">
           <div className="card-head-title">{comp.title}</div>
-          {rows && !loading ? <div className="card-head-meta">{rows.row_count} 行</div> : null}
+          {rows && !loading ? <div className="card-head-meta">{t('common.rows', { n: rows.row_count })}</div> : null}
         </div>
       ) : null}
       {body}

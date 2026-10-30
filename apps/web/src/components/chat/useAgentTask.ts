@@ -5,6 +5,7 @@ import { SseClient, type SseEvent } from '../../api/sse';
 import type { ApplyPatchResponse, Canvas, ChatMessage, Task, TaskStatus } from '../../api/types';
 import { useAuthStore } from '../../stores/auth';
 import { invalidateSourceRows } from '../../hooks/useSourceRows';
+import { getLocale, tr } from '../../i18n';
 
 export interface ChatMsg {
   id: string;
@@ -36,20 +37,9 @@ export interface Proposal {
 const TERMINAL: TaskStatus[] = ['succeeded', 'failed', 'cancelled', 'interrupted'];
 const ACTIVE: TaskStatus[] = ['queued', 'running', 'waiting_for_user', 'waiting_for_apply'];
 
-const PHASE_LABELS: Record<string, string> = {
-  main: 'Agent 推理',
-  intent_parse: '解析意图',
-  sql_generate: '生成查询',
-  query: '执行查询',
-  patch_propose: '生成修改方案',
-  clarify: '澄清需求',
-  plan: '规划',
-  validate: '校验',
-  analysis: '结果分析',
-};
-
+/** SSE 阶段名 → 字典 key（phase.<name>）；界面语言由事件到达时的 locale 决定 */
 function phaseLabel(phase: string): string {
-  return PHASE_LABELS[phase] ?? phase;
+  return tr(`phase.${phase}`, undefined, phase);
 }
 
 export function isTaskActive(status: TaskStatus | null): boolean {
@@ -67,9 +57,9 @@ function describeResult(result: unknown): string | null {
     if (typeof r.message === 'string') return r.message;
     if (typeof r.summary === 'string') return r.summary;
     // 其余模式给一句人话——绝不把原始 JSON 甩给用户。
-    if (typeof r.refreshed_sources === 'number') return `已刷新 ${r.refreshed_sources} 个数据源`;
-    if (Array.isArray(r.sources)) return `已生成 ${r.sources.length} 个数据查询结果`;
-    if (r.patch_id != null && r.dashboard_id != null) return '候选变更已生成，请在上方预览中确认应用';
+    if (typeof r.refreshed_sources === 'number') return tr('result.refreshed', { n: r.refreshed_sources });
+    if (Array.isArray(r.sources)) return tr('result.generated', { n: r.sources.length });
+    if (r.patch_id != null && r.dashboard_id != null) return tr('result.patchReady');
     return null; // 未知结构宁可不说，也不显示乱码 JSON
   }
   return String(result);
@@ -232,7 +222,7 @@ export function useAgentTask({ workspaceId, dashboardId, onPatchApplied }: UseAg
           setPhases((prev) => {
             if (prev.length === 0) {
               return [
-                { phase: '_root', label: '执行中', status: 'running', summary: null, tools: [{ tool, agent, status: 'running', summary: null }] },
+                { phase: '_root', label: tr('phase.executing'), status: 'running', summary: null, tools: [{ tool, agent, status: 'running', summary: null }] },
               ];
             }
             const next = [...prev];
@@ -275,7 +265,7 @@ export function useAgentTask({ workspaceId, dashboardId, onPatchApplied }: UseAg
           break;
         }
         case 'clarification.requested': {
-          setClarification(String(data.question ?? '请补充更多信息'));
+          setClarification(String(data.question ?? tr('clarify.default')));
           applyStatus('waiting_for_user');
           break;
         }
@@ -306,7 +296,7 @@ export function useAgentTask({ workspaceId, dashboardId, onPatchApplied }: UseAg
         case 'task.failed': {
           finalizePhases();
           applyStatus('failed');
-          setTaskError(String(data.error ?? '任务执行失败'));
+          setTaskError(String(data.error ?? tr('result.taskFailed')));
           clearSession(sessionKey);
           stopStream();
           break;
@@ -429,6 +419,8 @@ export function useAgentTask({ workspaceId, dashboardId, onPatchApplied }: UseAg
         }
         const resp = await api.post<{ task_id: number; message_seq: number }>(`/api/conversations/${convId}/messages`, {
           content: text,
+          // 界面当前语言：Agent 回答/看板标题/口径说明跟随该语言（后端缺省 zh）
+          locale: getLocale(),
         });
         lastSeqRef.current = 0;
         taskIdRef.current = resp.task_id;
@@ -489,8 +481,8 @@ export function useAgentTask({ workspaceId, dashboardId, onPatchApplied }: UseAg
     } catch (e) {
       setPatchError(
         e instanceof ApiError && e.status === 409
-          ? '版本冲突：看板已被其他修改更新，请刷新页面后重试'
-          : `应用修改失败：${errorMessage(e)}`,
+          ? tr('patch.conflict')
+          : tr('patch.applyFailed', { msg: errorMessage(e) }),
       );
     }
   }, [onPatchApplied, proposal, sessionKey, stopStream]);
@@ -505,7 +497,7 @@ export function useAgentTask({ workspaceId, dashboardId, onPatchApplied }: UseAg
       clearSession(sessionKey);
       stopStream();
     } catch (e) {
-      setPatchError(`拒绝修改失败：${errorMessage(e)}`);
+      setPatchError(tr('patch.rejectFailed', { msg: errorMessage(e) }));
     }
   }, [proposal, sessionKey, stopStream]);
 

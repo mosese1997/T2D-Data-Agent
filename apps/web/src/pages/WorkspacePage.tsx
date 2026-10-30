@@ -5,6 +5,7 @@ import { errorMessage } from '../api/error';
 import type { DashboardSummary } from '../api/types';
 import { useWorkspaces } from '../hooks/useWorkspaces';
 import { ErrorBox, Loading, StatusBadge, formatDateTime } from '../components/common/ui';
+import { useI18n } from '../i18n';
 
 export default function WorkspacePage() {
   const { workspaceId } = useParams();
@@ -14,6 +15,7 @@ export default function WorkspacePage() {
   const [error, setError] = useState<string | null>(null);
   const { workspaces } = useWorkspaces();
   const ws = workspaces?.find((w) => w.id === wid) ?? null;
+  const { t } = useI18n();
 
   useEffect(() => {
     let alive = true;
@@ -36,11 +38,11 @@ export default function WorkspacePage() {
     <div className="page">
       <div className="page-head">
         <div>
-          <h1>{ws?.name ?? `工作空间 #${wid}`}</h1>
-          <p className="muted">{ws ? `${ws.slug} · 我的角色：${ws.role}` : ''}</p>
+          <h1>{ws?.name ?? t('ws.fallbackName', { id: wid })}</h1>
+          <p className="muted">{ws ? t('ws.roleLine', { slug: ws.slug, role: ws.role }) : ''}</p>
         </div>
         <button type="button" className="btn btn-primary" onClick={() => navigate(`/w/${wid}/new`)}>
-          + 新建看板
+          {t('ws.newDashboard')}
         </button>
       </div>
 
@@ -58,12 +60,12 @@ export default function WorkspacePage() {
               <div className="dashboard-card-title">{d.title}</div>
               <div className="dashboard-card-meta">
                 <StatusBadge status={d.status} />
-                <span className="muted">更新于 {formatDateTime(d.updated_at)}</span>
+                <span className="muted">{t('ws.updatedAt', { time: formatDateTime(d.updated_at) })}</span>
               </div>
             </button>
           ))}
           {dashboards.length === 0 && (
-            <div className="muted">还没有看板。点击右上角「新建看板」，让 Agent 帮你从零搭建。</div>
+            <div className="muted">{t('ws.empty')}</div>
           )}
         </div>
       )}

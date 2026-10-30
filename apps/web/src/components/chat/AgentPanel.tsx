@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ApplyPatchResponse } from '../../api/types';
+import { useI18n } from '../../i18n';
 import { useAgentTask } from './useAgentTask';
 import TaskProgress from './TaskProgress';
 import PatchProposal from './PatchProposal';
@@ -27,6 +28,7 @@ export default function AgentPanel({ workspaceId, dashboardId, collapsed, onTogg
   const task = useAgentTask({ workspaceId, dashboardId, onPatchApplied });
   const [input, setInput] = useState('');
   const bodyRef = useRef<HTMLDivElement>(null);
+  const { t } = useI18n();
 
   // 新消息 / 进度变化时滚动到底部
   useEffect(() => {
@@ -46,7 +48,7 @@ export default function AgentPanel({ workspaceId, dashboardId, collapsed, onTogg
   if (collapsed) {
     return (
       <aside className="agent-panel collapsed">
-        <button type="button" className="agent-toggle" onClick={onToggleCollapse} title="展开 Agent 面板">
+        <button type="button" className="agent-toggle" onClick={onToggleCollapse} title={t('agent.expand')}>
           <span className="agent-toggle-icon" aria-hidden="true">‹</span>
           <span className="agent-toggle-text">Agent</span>
         </button>
@@ -57,14 +59,14 @@ export default function AgentPanel({ workspaceId, dashboardId, collapsed, onTogg
   return (
     <aside className="agent-panel">
       <div className="agent-head">
-        <span className="agent-title">Agent 助手</span>
+        <span className="agent-title">{t('agent.title')}</span>
         <div className="agent-head-actions">
           {task.active && (
             <button type="button" className="btn btn-danger-ghost btn-sm" onClick={() => void task.cancel()}>
-              取消任务
+              {t('agent.cancelTask')}
             </button>
           )}
-          <button type="button" className="agent-collapse-btn" onClick={onToggleCollapse} title="收起面板">
+          <button type="button" className="agent-collapse-btn" onClick={onToggleCollapse} title={t('agent.collapse')}>
             <span aria-hidden="true">›</span>
           </button>
         </div>
@@ -74,16 +76,16 @@ export default function AgentPanel({ workspaceId, dashboardId, collapsed, onTogg
         {task.messages.length === 0 && !task.active && (
           <div className="agent-welcome">
             {dashboardId === null ? (
-              <p>这是一个空白看板。告诉 Agent 你想看什么，例如：</p>
+              <p>{t('agent.welcomeNew')}</p>
             ) : (
-              <p>和 Agent 对话，修改当前看板。例如：</p>
+              <p>{t('agent.welcomeExisting')}</p>
             )}
             <ul>
-              <li>「最近 7 天各国 GMV 趋势，再给我一个 GMV 总量」</li>
-              <li>「按渠道拆分订单量，做成柱状图」</li>
-              <li>「加一段口径说明文字」</li>
+              <li>{t('agent.example1')}</li>
+              <li>{t('agent.example2')}</li>
+              <li>{t('agent.example3')}</li>
             </ul>
-            <p className="muted">Agent 会生成查询、执行并提议看板修改，由你确认应用。</p>
+            <p className="muted">{t('agent.welcomeHint')}</p>
           </div>
         )}
 
@@ -96,7 +98,7 @@ export default function AgentPanel({ workspaceId, dashboardId, collapsed, onTogg
         </div>
 
         {task.resultText && <div className="result-box">{inlineBold(task.resultText)}</div>}
-        {task.taskError && <ErrorBox message={`任务失败：${task.taskError}`} />}
+        {task.taskError && <ErrorBox message={t('agent.taskFailed', { msg: task.taskError })} />}
 
         <TaskProgress phases={task.phases} status={task.status} streamState={task.streamState} active={task.active} />
 
@@ -115,14 +117,14 @@ export default function AgentPanel({ workspaceId, dashboardId, collapsed, onTogg
           rows={2}
           placeholder={
             task.status === 'waiting_for_user'
-              ? '等你回复上方的问题后任务才会继续…'
+              ? t('agent.placeholder.waitingUser')
               : task.status === 'waiting_for_apply'
-                ? '候选变更待应用（见上方卡片），应用后即可继续对话…'
+                ? t('agent.placeholder.waitingApply')
                 : task.active
-                  ? '任务进行中…（可点击取消）'
+                  ? t('agent.placeholder.running')
                   : dashboardId === null
-                    ? '描述你想看的看板，例如：最近 7 天各国 GMV 趋势'
-                    : '描述你想对看板做的修改…'
+                    ? t('agent.placeholder.new')
+                    : t('agent.placeholder.edit')
           }
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
@@ -133,7 +135,7 @@ export default function AgentPanel({ workspaceId, dashboardId, collapsed, onTogg
           }}
         />
         <button type="button" className="btn btn-primary" disabled={!canSend || !input.trim()} onClick={submit}>
-          {task.busy ? '提交中…' : '发送'}
+          {task.busy ? t('common.submitting') : t('common.send')}
         </button>
       </div>
     </aside>

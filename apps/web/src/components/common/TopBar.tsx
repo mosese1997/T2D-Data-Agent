@@ -4,6 +4,31 @@ import { useAuthStore } from '../../stores/auth';
 import { useHealthStore } from '../../stores/health';
 import { useWorkspaces } from '../../hooks/useWorkspaces';
 import { useIsAdmin } from '../../hooks/useIsAdmin';
+import { useI18n } from '../../i18n';
+import type { Locale } from '../../i18n';
+
+/** 语言切换分段按钮组：中 / EN，当前语言橙色高亮 */
+function LangSwitch() {
+  const { locale, setLocale, t } = useI18n();
+  const options: { value: Locale; label: string }[] = [
+    { value: 'zh', label: '中' },
+    { value: 'en', label: 'EN' },
+  ];
+  return (
+    <div className="lang-switch" role="group" aria-label={t('topbar.langSwitch')}>
+      {options.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          className={`lang-btn ${locale === o.value ? 'active' : ''}`}
+          onClick={() => setLocale(o.value)}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export default function TopBar() {
   const navigate = useNavigate();
@@ -13,6 +38,7 @@ export default function TopBar() {
   const brand = useHealthStore((s) => s.health?.brand ?? 't2d');
   const { workspaces } = useWorkspaces();
   const isAdmin = useIsAdmin();
+  const { t } = useI18n();
 
   const [wsMenuOpen, setWsMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -43,7 +69,7 @@ export default function TopBar() {
 
   return (
     <header className="topbar">
-      <button type="button" className="brand" onClick={() => navigate('/')} title="回到首页">
+      <button type="button" className="brand" onClick={() => navigate('/')} title={t('topbar.backHome')}>
         <span className="brand-mark">{brand}</span>
         <span className="brand-sub">Agentic Talk to Data</span>
       </button>
@@ -51,12 +77,12 @@ export default function TopBar() {
       <div className="topbar-center">
         <div className="menu-root" ref={wsRef}>
           <button type="button" className="menu-trigger" onClick={() => setWsMenuOpen((v) => !v)}>
-            {currentWs ? currentWs.name : '工作空间'}
+            {currentWs ? currentWs.name : t('topbar.workspaces')}
             <span className="caret" aria-hidden="true">▾</span>
           </button>
           {wsMenuOpen && (
             <div className="menu-pop">
-              {workspaces === null && <div className="menu-item static muted">加载中…</div>}
+              {workspaces === null && <div className="menu-item static muted">{t('common.loading')}</div>}
               {workspaces?.map((w) => (
                 <button
                   key={w.id}
@@ -77,19 +103,19 @@ export default function TopBar() {
         {currentWsId !== null && (
           <nav className="topbar-tabs">
             <NavLink to={`/w/${currentWsId}`} end className={({ isActive }) => `tab ${isActive ? 'active' : ''}`}>
-              看板
+              {t('topbar.dashboards')}
             </NavLink>
             <NavLink to={`/w/${currentWsId}/sources`} className={({ isActive }) => `tab ${isActive ? 'active' : ''}`}>
-              数据源
+              {t('topbar.sources')}
             </NavLink>
           </nav>
         )}
-        <nav className="topbar-tabs topbar-global" aria-label="全局导航">
+        <nav className="topbar-tabs topbar-global" aria-label={t('topbar.globalNav')}>
           <NavLink to="/requests" className={({ isActive }) => `tab ${isActive ? 'active' : ''}`}>
-            审批
+            {t('topbar.requests')}
           </NavLink>
           <NavLink to="/activity" className={({ isActive }) => `tab ${isActive ? 'active' : ''}`}>
-            活动
+            {t('topbar.activity')}
           </NavLink>
           <NavLink to="/wiki" className={({ isActive }) => `tab ${isActive ? 'active' : ''}`}>
             Wiki
@@ -99,23 +125,24 @@ export default function TopBar() {
               to="/admin"
               className={({ isActive }) => `tab ${isActive ? 'active' : ''}`}
             >
-              管理台
+              {t('topbar.admin')}
             </NavLink>
           )}
         </nav>
       </div>
 
       <div className="topbar-right">
+        <LangSwitch />
         <div className="menu-root" ref={userRef}>
           <button type="button" className="menu-trigger" onClick={() => setUserMenuOpen((v) => !v)}>
-            {user?.display_name || user?.username || '未登录'}
+            {user?.display_name || user?.username || t('topbar.notLoggedIn')}
             <span className="caret" aria-hidden="true">▾</span>
           </button>
           {userMenuOpen && (
             <div className="menu-pop menu-pop-right">
               <div className="menu-item static">@{user?.username ?? '—'}</div>
               <button type="button" className="menu-item" onClick={handleLogout}>
-                退出登录
+                {t('common.logout')}
               </button>
             </div>
           )}

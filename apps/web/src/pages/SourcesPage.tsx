@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { errorMessage } from '../api/error';
 import type { Dashboard, DashboardSummary, RowsResponse, Source } from '../api/types';
+import { useI18n } from '../i18n';
 import { ErrorBox, Loading, formatCell, formatDateTime } from '../components/common/ui';
 
 export default function SourcesPage() {
@@ -11,6 +12,7 @@ export default function SourcesPage() {
   const [sources, setSources] = useState<Source[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const { t } = useI18n();
 
   useEffect(() => {
     let alive = true;
@@ -56,13 +58,13 @@ export default function SourcesPage() {
     <div className="page">
       <div className="page-head">
         <div>
-          <h1>数据源（Sources）</h1>
-          <p className="muted">当前空间看板引用的查询数据源，可查看 SQL、口径说明与数据预览。</p>
+          <h1>{t('sources.title')}</h1>
+          <p className="muted">{t('sources.sub')}</p>
         </div>
       </div>
 
       {error && <ErrorBox message={error} />}
-      {sources === null && !error && <Loading label="正在收集看板引用的数据源…" />}
+      {sources === null && !error && <Loading label={t('sources.collecting')} />}
 
       {sources !== null && (
         <div className="sources-layout">
@@ -76,17 +78,17 @@ export default function SourcesPage() {
               >
                 <div className="source-title">{s.title}</div>
                 <div className="muted">
-                  {s.row_count} 行 · {formatDateTime(s.created_at)}
+                  {t('sources.rowsAt', { n: s.row_count, time: formatDateTime(s.created_at) })}
                 </div>
               </button>
             ))}
-            {sources.length === 0 && <div className="muted">当前空间的看板尚未引用任何数据源。</div>}
+            {sources.length === 0 && <div className="muted">{t('sources.emptyList')}</div>}
           </div>
           <div className="source-detail">
             {selected ? (
               <SourceDetail source={selected} />
             ) : (
-              <div className="muted source-detail-empty">点击左侧数据源，查看 SQL、口径说明与数据预览。</div>
+              <div className="muted source-detail-empty">{t('sources.detailEmpty')}</div>
             )}
           </div>
         </div>
@@ -98,6 +100,7 @@ export default function SourcesPage() {
 function SourceDetail({ source }: { source: Source }) {
   const [preview, setPreview] = useState<RowsResponse | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const { t } = useI18n();
 
   useEffect(() => {
     let alive = true;
@@ -122,7 +125,7 @@ function SourceDetail({ source }: { source: Source }) {
     <div className="card source-detail-card">
       <h3 className="source-detail-title">{source.title}</h3>
       <div className="muted">
-        {source.row_count} 行 · 状态 {source.status} · 创建于 {formatDateTime(source.created_at)}
+        {t('sources.detailMeta', { n: source.row_count, status: source.status, time: formatDateTime(source.created_at) })}
       </div>
 
       <h4>SQL</h4>
@@ -130,7 +133,7 @@ function SourceDetail({ source }: { source: Source }) {
 
       {notes.length > 0 && (
         <>
-          <h4>口径说明</h4>
+          <h4>{t('sources.caliberNotes')}</h4>
           <ul className="notes-list">
             {notes.map((n, i) => (
               <li key={i}>{n}</li>
@@ -139,7 +142,7 @@ function SourceDetail({ source }: { source: Source }) {
         </>
       )}
 
-      <h4>数据预览（前 50 行）</h4>
+      <h4>{t('sources.preview')}</h4>
       {previewError && <ErrorBox message={previewError} />}
       {preview ? (
         <div className="table-scroll">
@@ -162,7 +165,7 @@ function SourceDetail({ source }: { source: Source }) {
               {preview.rows.length === 0 && (
                 <tr>
                   <td colSpan={preview.columns.length} className="muted">
-                    无数据行
+                    {t('sources.noRows')}
                   </td>
                 </tr>
               )}
@@ -170,7 +173,7 @@ function SourceDetail({ source }: { source: Source }) {
           </table>
         </div>
       ) : (
-        !previewError && <Loading label="加载预览数据…" />
+        !previewError && <Loading label={t('sources.loadingPreview')} />
       )}
     </div>
   );

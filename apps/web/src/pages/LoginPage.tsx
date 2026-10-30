@@ -5,14 +5,15 @@ import { errorMessage } from '../api/error';
 import { login, useAuthStore } from '../stores/auth';
 import { useHealthStore } from '../stores/health';
 import { ErrorBox } from '../components/common/ui';
+import { useI18n } from '../i18n';
 
 const DEMO_ACCOUNTS = [
-  { username: 'admin', password: 'admin-demo-2026', label: '管理员 admin' },
-  { username: 'analyst_a', password: 'analyst-demo-2026', label: '分析师 analyst_a' },
-  { username: 'analyst_b', password: 'analyst-demo-2026', label: '分析师 analyst_b' },
-  { username: 'viewer_b', password: 'viewer-demo-2026', label: '查看者 viewer_b' },
-  { username: 'viewer_c', password: 'viewer-demo-2026', label: '查看者 viewer_c' },
-  { username: 'ops', password: 'ops-demo-2026', label: '运维 ops' },
+  { username: 'admin', password: 'admin-demo-2026', labelKey: 'login.account.admin' },
+  { username: 'analyst_a', password: 'analyst-demo-2026', labelKey: 'login.account.analyst_a' },
+  { username: 'analyst_b', password: 'analyst-demo-2026', labelKey: 'login.account.analyst_b' },
+  { username: 'viewer_b', password: 'viewer-demo-2026', labelKey: 'login.account.viewer_b' },
+  { username: 'viewer_c', password: 'viewer-demo-2026', labelKey: 'login.account.viewer_c' },
+  { username: 'ops', password: 'ops-demo-2026', labelKey: 'login.account.ops' },
 ];
 
 export default function LoginPage() {
@@ -25,6 +26,7 @@ export default function LoginPage() {
   const token = useAuthStore((s) => s.token);
   const brand = useHealthStore((s) => s.health?.brand ?? 't2d');
   const demoMode = useHealthStore((s) => s.health?.demo_mode === true);
+  const { t } = useI18n();
 
   useEffect(() => {
     if (token) navigate('/', { replace: true });
@@ -54,7 +56,7 @@ export default function LoginPage() {
         <div className="login-sub">Agentic Talk to Data</div>
         <form onSubmit={submit}>
           <label className="field">
-            <span>用户名</span>
+            <span>{t('login.username')}</span>
             <input
               value={username}
               onChange={(e) => setUsername(e.target.value)}
@@ -63,7 +65,7 @@ export default function LoginPage() {
             />
           </label>
           <label className="field">
-            <span>密码</span>
+            <span>{t('login.password')}</span>
             <input
               type="password"
               value={password}
@@ -73,11 +75,11 @@ export default function LoginPage() {
           </label>
           {error && <ErrorBox message={error} />}
           <button className="btn btn-primary btn-block" type="submit" disabled={busy || !username.trim() || !password}>
-            {busy ? '登录中…' : '登录'}
+            {busy ? t('login.submitting') : t('login.submit')}
           </button>
         </form>
         <div className="login-demo">
-          <div className="login-demo-title">演示账号（点击一键填入）</div>
+          <div className="login-demo-title">{t('login.demoTitle')}</div>
           <div className="login-demo-grid">
             {DEMO_ACCOUNTS.map((a) => (
               <button
@@ -89,11 +91,14 @@ export default function LoginPage() {
                   setPassword(a.password);
                 }}
               >
-                {a.label}
+                {t(a.labelKey)}
               </button>
             ))}
           </div>
-          <div className="login-env-note muted">HTTP 演示环境{demoMode ? ' · 当前为演示数据模式' : ''}</div>
+          <div className="login-env-note muted">
+            {t('login.envNote')}
+            {demoMode ? t('login.demoModeSuffix') : ''}
+          </div>
         </div>
       </div>
     </div>

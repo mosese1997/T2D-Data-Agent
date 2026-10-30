@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { errorDetail } from '../api/error';
 import type { MetricEntry, TermEntry, WikiData } from '../api/types';
+import { useI18n } from '../i18n';
 import { ErrorBox, Loading } from '../components/common/ui';
 
 type WikiTab = 'metrics' | 'terms';
@@ -11,6 +12,7 @@ export default function WikiPage() {
   const [tab, setTab] = useState<WikiTab>('metrics');
   const [data, setData] = useState<WikiData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { t } = useI18n();
 
   useEffect(() => {
     let alive = true;
@@ -31,8 +33,8 @@ export default function WikiPage() {
     <div className="page">
       <div className="page-head">
         <div>
-          <h1>Wiki · 指标字典与业务术语</h1>
-          <p className="muted">语义层的权威口径定义。Agent 生成查询时以此为准，相似度检索不决定口径与权限。</p>
+          <h1>{t('wiki.title')}</h1>
+          <p className="muted">{t('wiki.sub')}</p>
         </div>
       </div>
 
@@ -42,26 +44,26 @@ export default function WikiPage() {
           className={`tab ${tab === 'metrics' ? 'active' : ''}`}
           onClick={() => setTab('metrics')}
         >
-          指标字典{data ? `（${data.metrics.length}）` : ''}
+          {t('wiki.metrics')}{data ? `（${data.metrics.length}）` : ''}
         </button>
         <button
           type="button"
           className={`tab ${tab === 'terms' ? 'active' : ''}`}
           onClick={() => setTab('terms')}
         >
-          业务术语{data ? `（${data.terms.length}）` : ''}
+          {t('wiki.terms')}{data ? `（${data.terms.length}）` : ''}
         </button>
       </nav>
 
       {error && <ErrorBox message={error} />}
-      {data === null && !error && <Loading label="加载语义字典…" />}
+      {data === null && !error && <Loading label={t('wiki.loading')} />}
 
       {data !== null && tab === 'metrics' && (
         <div className="wiki-grid">
           {data.metrics.map((m) => (
             <MetricCard metric={m} key={m.metric_key} />
           ))}
-          {data.metrics.length === 0 && <div className="muted">暂无指标定义。</div>}
+          {data.metrics.length === 0 && <div className="muted">{t('wiki.noMetrics')}</div>}
         </div>
       )}
 
@@ -70,29 +72,19 @@ export default function WikiPage() {
           {data.terms.map((t) => (
             <TermCard term={t} key={t.term} />
           ))}
-          {data.terms.length === 0 && <div className="muted">暂无业务术语。</div>}
+          {data.terms.length === 0 && <div className="muted">{t('wiki.noTerms')}</div>}
         </div>
       )}
     </div>
   );
 }
 
-const CURRENCY_LABELS: Record<string, string> = {
-  local: '本币（local）',
-  usd_fixed: '固定 USD（usd_fixed）',
-};
-
-const GRAIN_LABELS: Record<string, string> = {
-  order: '订单（order）',
-  item: '订单行（item）',
-  day: '天（day）',
-};
-
 function asStringList(v: unknown): string[] {
   return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
 }
 
 function MetricCard({ metric }: { metric: MetricEntry }) {
+  const { t, locale } = useI18n();
   const synonyms = asStringList(metric.synonyms);
   const exclusions = asStringList(metric.exclusions);
   return (
@@ -112,25 +104,25 @@ function MetricCard({ metric }: { metric: MetricEntry }) {
         </div>
       )}
       <p>{metric.description}</p>
-      <h4>口径要点</h4>
+      <h4>{t('wiki.caliberPoints')}</h4>
       <div className="kv-list">
         <div className="kv-row">
-          <span className="kv-key">基础数据集</span>
+          <span className="kv-key">{t('wiki.baseDataset')}</span>
           <span>{metric.base_dataset ?? '—'}</span>
         </div>
         <div className="kv-row">
-          <span className="kv-key">统计粒度</span>
-          <span>{metric.grain ? (GRAIN_LABELS[metric.grain] ?? metric.grain) : '—'}</span>
+          <span className="kv-key">{t('wiki.grain')}</span>
+          <span>{metric.grain ? t(`wiki.grain.${metric.grain}`, undefined, metric.grain) : '—'}</span>
         </div>
         <div className="kv-row">
-          <span className="kv-key">币种策略</span>
+          <span className="kv-key">{t('wiki.currency')}</span>
           <span>
-            {metric.currency_policy ? (CURRENCY_LABELS[metric.currency_policy] ?? metric.currency_policy) : '—'}
+            {metric.currency_policy ? t(`wiki.currency.${metric.currency_policy}`, undefined, metric.currency_policy) : '—'}
           </span>
         </div>
         <div className="kv-row">
-          <span className="kv-key">排除条件</span>
-          <span>{exclusions.length > 0 ? exclusions.join('；') : '无'}</span>
+          <span className="kv-key">{t('wiki.exclusions')}</span>
+          <span>{exclusions.length > 0 ? exclusions.join(locale === 'zh' ? '；' : '; ') : t('wiki.none')}</span>
         </div>
       </div>
     </div>
@@ -138,12 +130,13 @@ function MetricCard({ metric }: { metric: MetricEntry }) {
 }
 
 function TermCard({ term }: { term: TermEntry }) {
+  const { t } = useI18n();
   const aliases = asStringList(term.aliases);
   return (
     <div className="card wiki-card">
       <div className="wiki-card-head">
         <h3>{term.term}</h3>
-        {term.ref_metric && <span className="badge badge-blue">关联指标：{term.ref_metric}</span>}
+        {term.ref_metric && <span className="badge badge-blue">{t('wiki.refMetric', { metric: term.ref_metric })}</span>}
       </div>
       {aliases.length > 0 && (
         <div className="tag-row">

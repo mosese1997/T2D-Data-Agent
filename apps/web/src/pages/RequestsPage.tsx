@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { errorDetail } from '../api/error';
 import type { ApprovalRequest } from '../api/types';
+import { useI18n } from '../i18n';
 import { ErrorBox, Loading, formatDateTime } from '../components/common/ui';
 import { useIsAdmin } from '../hooks/useIsAdmin';
 
@@ -16,6 +17,7 @@ export default function RequestsPage() {
   const [actingId, setActingId] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionDone, setActionDone] = useState<string | null>(null);
+  const { t } = useI18n();
 
   const load = useCallback(() => {
     let alive = true;
@@ -45,7 +47,7 @@ export default function RequestsPage() {
     setActionDone(null);
     try {
       await api.post(`/api/approvals/${approvalId}/${action}`);
-      setActionDone(action === 'approve' ? '已批准，看板已发布到目标空间。' : '已拒绝该发布请求。');
+      setActionDone(action === 'approve' ? t('requests.approved') : t('requests.rejected'));
       load();
     } catch (e) {
       setActionError(errorDetail(e));
@@ -58,17 +60,17 @@ export default function RequestsPage() {
     <div className="page">
       <div className="page-head">
         <div>
-          <h1>发布审批</h1>
-          <p className="muted">目标业务空间的看板发布请求。批准后，看板快照（含数据源与结果文件）会发布到目标空间。</p>
+          <h1>{t('requests.title')}</h1>
+          <p className="muted">{t('requests.sub')}</p>
         </div>
       </div>
 
-      {isAdmin === null && <Loading label="正在确认权限…" />}
+      {isAdmin === null && <Loading label={t('activity.checkingPermission')} />}
 
       {isAdmin === false && (
         <div className="card empty-state">
-          <div className="empty-state-title">需要管理员权限</div>
-          <p className="muted">发布审批仅目标业务空间的管理员可见与操作。你当前不是任何空间的管理员。</p>
+          <div className="empty-state-title">{t('requests.needAdmin.title')}</div>
+          <p className="muted">{t('requests.needAdmin.body')}</p>
         </div>
       )}
 
@@ -77,11 +79,11 @@ export default function RequestsPage() {
           {error && <ErrorBox message={error} />}
           {actionError && <ErrorBox message={actionError} />}
           {actionDone && <div className="result-box">{actionDone}</div>}
-          {requests === null && !error && <Loading label="加载待审批请求…" />}
+          {requests === null && !error && <Loading label={t('requests.loading')} />}
           {requests !== null && requests.length === 0 && (
             <div className="card empty-state">
-              <div className="empty-state-title">暂无待审批请求</div>
-              <p className="muted">有分析师向你所在业务空间发起发布请求时会出现在这里。</p>
+              <div className="empty-state-title">{t('requests.empty.title')}</div>
+              <p className="muted">{t('requests.empty.body')}</p>
             </div>
           )}
           {requests !== null && requests.length > 0 && (
@@ -91,12 +93,14 @@ export default function RequestsPage() {
                   <div className="request-main">
                     <div className="request-title">
                       {r.dashboard_title}
-                      <span className="badge badge-blue">发布 → {r.target_workspace}</span>
+                      <span className="badge badge-blue">{t('requests.publishTo', { ws: r.target_workspace })}</span>
                     </div>
                     <div className="muted">
-                      请求人：用户 #{r.requested_by} · {formatDateTime(r.created_at)}
+                      {t('requests.requester', { id: r.requested_by, time: formatDateTime(r.created_at) })}
                     </div>
-                    {r.comment && r.comment.trim() !== '' && <div className="request-comment">备注：{r.comment}</div>}
+                    {r.comment && r.comment.trim() !== '' && (
+                      <div className="request-comment">{t('requests.comment', { comment: r.comment })}</div>
+                    )}
                   </div>
                   <div className="request-actions">
                     <button
@@ -105,7 +109,7 @@ export default function RequestsPage() {
                       disabled={actingId !== null}
                       onClick={() => void decide(r.approval_id, 'approve')}
                     >
-                      {actingId === r.approval_id ? '处理中…' : '批准'}
+                      {actingId === r.approval_id ? t('common.processing') : t('common.approve')}
                     </button>
                     <button
                       type="button"
@@ -113,7 +117,7 @@ export default function RequestsPage() {
                       disabled={actingId !== null}
                       onClick={() => void decide(r.approval_id, 'reject')}
                     >
-                      拒绝
+                      {t('common.reject')}
                     </button>
                   </div>
                 </div>

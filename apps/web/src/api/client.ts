@@ -1,5 +1,6 @@
 import { ApiError } from './error';
 import { useAuthStore } from '../stores/auth';
+import { tr } from '../i18n';
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const token = useAuthStore.getState().token;
@@ -16,7 +17,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   if (res.status === 401) {
     // 统一 401 处理：清空本地会话，路由层会跳转到登录页
     if (token) useAuthStore.getState().logout();
-    throw new ApiError(401, '登录已过期，请重新登录');
+    throw new ApiError(401, tr('error.sessionExpired'));
   }
 
   if (!res.ok) {
@@ -26,7 +27,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     } catch {
       payload = '';
     }
-    throw new ApiError(res.status, `请求失败（HTTP ${res.status}）`, payload);
+    throw new ApiError(res.status, tr('error.requestFailed', { status: res.status }), payload);
   }
 
   return (await res.json()) as T;

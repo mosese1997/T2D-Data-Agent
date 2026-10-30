@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { tr } from '../i18n';
 import type { HealthInfo } from '../api/types';
 
 interface HealthState {
@@ -20,7 +21,7 @@ export const useHealthStore = create<HealthState>((set) => ({
     try {
       set({ health: await fetchHealth(), error: null });
     } catch (e) {
-      set({ health: null, error: e instanceof Error ? e.message : '未知错误' });
+      set({ health: null, error: e instanceof Error ? e.message : tr('error.unknown') });
     }
   },
 }));

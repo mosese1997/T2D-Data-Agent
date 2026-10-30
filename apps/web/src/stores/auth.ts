@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { ApiError } from '../api/error';
 import { clearWorkspacesCache } from '../hooks/useWorkspaces';
+import { tr } from '../i18n';
 import type { LoginResponse, User } from '../api/types';
 
 interface AuthState {
@@ -65,7 +66,7 @@ export async function login(username: string, password: string): Promise<void> {
     body: JSON.stringify({ username, password }),
   });
   if (!res.ok) {
-    const msg = res.status === 401 ? '用户名或密码错误' : `登录失败（HTTP ${res.status}）`;
+    const msg = res.status === 401 ? tr('login.error.badCredentials') : tr('login.error.http', { status: res.status });
     throw new ApiError(res.status, msg);
   }
   const data = (await res.json()) as LoginResponse;

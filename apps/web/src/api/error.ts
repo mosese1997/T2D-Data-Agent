@@ -1,3 +1,5 @@
+import { tr } from '../i18n';
+
 export class ApiError extends Error {
   status: number;
   payload: string;
@@ -13,7 +15,7 @@ export class ApiError extends Error {
 export function errorMessage(e: unknown): string {
   if (e instanceof ApiError) return e.message;
   if (e instanceof Error) return e.message;
-  return '未知错误';
+  return tr('error.unknown');
 }
 
 /** 优先取后端 JSON 响应里的 detail 字段（如 403/409 的具体原因），取不到再回退到通用消息 */

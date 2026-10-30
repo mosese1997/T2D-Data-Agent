@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useI18n } from '../../i18n';
 
 interface ClarificationFormProps {
   question: string;
@@ -8,6 +9,7 @@ interface ClarificationFormProps {
 export default function ClarificationForm({ question, onSubmit }: ClarificationFormProps) {
   const [value, setValue] = useState('');
   const [busy, setBusy] = useState(false);
+  const { t } = useI18n();
 
   const submit = async () => {
     const text = value.trim();
@@ -22,13 +24,13 @@ export default function ClarificationForm({ question, onSubmit }: ClarificationF
 
   return (
     <div className="clarify-card">
-      <div className="clarify-title">Agent 需要补充信息</div>
+      <div className="clarify-title">{t('clarify.title')}</div>
       <div className="clarify-question">{question}</div>
       <textarea
         className="clarify-input"
         value={value}
         rows={2}
-        placeholder="输入你的回答…"
+        placeholder={t('clarify.placeholder')}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === 'Enter' && !e.shiftKey) {
@@ -38,7 +40,7 @@ export default function ClarificationForm({ question, onSubmit }: ClarificationF
         }}
       />
       <button type="button" className="btn btn-primary btn-sm" disabled={busy || !value.trim()} onClick={() => void submit()}>
-        {busy ? '提交中…' : '提交回答'}
+        {busy ? t('common.submitting') : t('clarify.submit')}
       </button>
     </div>
   );

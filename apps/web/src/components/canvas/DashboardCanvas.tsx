@@ -1,4 +1,5 @@
 import type { Canvas, CanvasComponent } from '../../api/types';
+import { useI18n } from '../../i18n';
 import MetricCard from './MetricCard';
 import ChartCard from './ChartCard';
 import DataTableBlock from './DataTableBlock';
@@ -11,6 +12,7 @@ export interface DashboardCanvasProps {
 }
 
 export default function DashboardCanvas({ canvas, compact = false }: DashboardCanvasProps) {
+  const { t } = useI18n();
   const components = canvas?.components ?? [];
   const order = canvas?.layout?.order ?? null;
   const cols = canvas?.layout?.grid_cols ?? 12;
@@ -27,7 +29,7 @@ export default function DashboardCanvas({ canvas, compact = false }: DashboardCa
   }
 
   if (ordered.length === 0) {
-    return <div className="canvas-empty">画布为空——在右侧 Agent 面板描述你想看的数据，让 Agent 帮你搭建看板。</div>;
+    return <div className="canvas-empty">{t('canvas.empty')}</div>;
   }
 
   return (
@@ -45,6 +47,7 @@ export default function DashboardCanvas({ canvas, compact = false }: DashboardCa
 }
 
 function ComponentView({ comp, compact }: { comp: CanvasComponent; compact: boolean }) {
+  const { t } = useI18n();
   switch (comp.type) {
     case 'metric_card':
       return <MetricCard comp={comp} />;
@@ -56,6 +59,6 @@ function ComponentView({ comp, compact }: { comp: CanvasComponent; compact: bool
     case 'text_block':
       return <TextBlock comp={comp} />;
     default:
-      return <div className="card comp-unknown">暂不支持的组件类型：{comp.type}</div>;
+      return <div className="card comp-unknown">{t('canvas.unsupported', { type: comp.type })}</div>;
   }
 }
