@@ -130,6 +130,24 @@ PASSWORDS = {
 }
 
 
+def _sandbox_api_key() -> str:
+    """The sandbox key of the stack under test: env var first, then the
+    compose .env (the stack on :8001 is usually compose), then the dev
+    default. A wrong key makes every scripted sandbox case 401."""
+    key = os.environ.get("SANDBOX_API_KEY")
+    if key:
+        return key
+    compose_env = ROOT / "infra" / "compose" / ".env"
+    if compose_env.exists():
+        for line in compose_env.read_text().splitlines():
+            if line.startswith("SANDBOX_API_KEY="):
+                return line.split("=", 1)[1].strip()
+    return "t2d-probe-key-2026"
+
+
+os.environ.setdefault("SANDBOX_API_KEY", _sandbox_api_key())
+
+
 def api(method, path, token=None, body=None):
     req = urllib.request.Request(API + path, method=method)
     req.add_header("Content-Type", "application/json")
