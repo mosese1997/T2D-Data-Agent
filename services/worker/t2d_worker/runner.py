@@ -289,7 +289,9 @@ class TaskRunner:
 
             # ── phase 1: intent ─────────────────────────────────────
             intent = None
-            if checkpoint.get("step") in ("waiting_clarification", "query_executed", "patch_proposed"):
+            # waiting_clarification 不在此列：用户回答后必须重跑意图段，
+            # 复用旧的 clarify 意图会把空 time_spec 带进查询段（task 36 教训）。
+            if checkpoint.get("step") in ("query_executed", "patch_proposed"):
                 intent = checkpoint.get("state", {}).get("intent")
             if intent is None:
                 self._emit(task_id, "phase.started", {"phase": "intent_parse"}, phase="intent_parse")
@@ -344,6 +346,19 @@ class TaskRunner:
             simple_modify = intent.get("mode") == "simple_modify"
             is_analysis = intent.get("mode") == "analysis"
             is_answer = intent.get("mode") == "answer"
+
+            # 意图防线：进查询段前必须有可用时间口径（mode=clarify 或
+            # time_spec 为空时转澄清，绝不把残缺意图交给查询 Agent——task 36 教训）。
+            if not simple_modify and not (is_answer and not intent.get("metric_keys")):
+                if intent.get("mode") == "clarify" or not intent.get("time_spec"):
+                    question = intent.get("clarify") or (
+                        "请补充时间范围（如：最近7天 / 最近30天 / 上周 / 过去N天）"
+                        "以及想看的指标。")
+                    self._checkpoint(task_id, "waiting_clarification", {"intent": intent})
+                    self._emit(task_id, "clarification.requested",
+                               {"question": question}, phase="intent_parse")
+                    self._set_status(task_id, "waiting_for_user")
+                    return
 
             # ── phase 2: query sub-agent ────────────────────────────
             sources_info = None
@@ -489,12 +504,15 @@ class TaskRunner:
             if patch_info is None:
                 dashboard_id = dashboard_id or self._ensure_dashboard(task_id, ctx, user_text)
                 self._emit(task_id, "phase.started", {"phase": "patch_propose"}, phase="patch_propose")
+                existing = self._canvas_summary(dashboard_id)
                 design_messages = [{
                     "role": "user",
                     "content":
                         f"用户需求：{user_text}\n"
                         f"看板 dashboard_id：{dashboard_id}\n"
-                        f"Source 列表：\n" + json.dumps(sources_info, ensure_ascii=False, default=str),
+                        f"看板现有组件（新组件 id 必须避开这些）：\n"
+                        + json.dumps(existing, ensure_ascii=False, default=str)
+                        + f"\n\nSource 列表：\n" + json.dumps(sources_info, ensure_ascii=False, default=str),
                 }]
                 dresult = await self._run_agent(
                     task_id, ctx, cancel,
@@ -512,6 +530,17 @@ class TaskRunner:
                 patch_info = self._validated_patch(task_id, dashboard_id)
                 if patch_info is None:
                     patch_result = dresult.tool_results.get("propose_dashboard_patch") or {}
+                    # 设计 Agent 输出的是解释/澄清文字而非补丁 → 转澄清，
+                    # 不判失败（task 35 教训：合理的反问不是错误）。
+                    text = (dresult.content or "").strip()
+                    if dresult.status == "succeeded" and len(text) >= 10:
+                        self._emit(task_id, "agent.message", {"content": text})
+                        self._checkpoint(task_id, "waiting_clarification",
+                                         {"intent": intent, "sources": sources_info})
+                        self._emit(task_id, "clarification.requested",
+                                   {"question": text[:200]}, phase="patch_propose")
+                        self._set_status(task_id, "waiting_for_user")
+                        return
                     self._set_status(task_id, "failed", error={
                         "code": "patch_failed",
                         "message": patch_result.get("_summary") or "候选变更生成失败",
@@ -537,6 +566,20 @@ class TaskRunner:
                 "code": "runner_error", "message": f"{type(exc).__name__}: {exc}"})
 
     # ── helpers ────────────────────────────────────────────────────
+    def _canvas_summary(self, dashboard_id: int) -> list[dict]:
+        """Existing component ids/titles/types — the design agent needs them
+        to avoid id collisions (task 34: 'c1 already exists')."""
+        with self.maker() as s:
+            dashboard = s.get(Dashboard, dashboard_id)
+            version = (s.get(DashboardVersion, dashboard.current_version_id)
+                       if dashboard and dashboard.current_version_id else None)
+            if version is None:
+                return []
+            return [
+                {"id": c.get("id"), "type": c.get("type"), "title": c.get("title", "")}
+                for c in (version.canvas_json or {}).get("components", [])
+            ]
+
     def _prefetch_query_context(self, ctx, intent: dict) -> str:
         """Definitions + authorized schema, looked up by the runner (no LLM).
         Saves 2-3 tool round-trips per query task."""

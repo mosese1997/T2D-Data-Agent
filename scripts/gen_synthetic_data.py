@@ -208,12 +208,19 @@ def main() -> None:
     item_order = np.repeat(np.arange(1, args.orders + 1), n_items)
     item_product = rng.integers(1, 201, size=total_items)
     product_price = {p[0]: p[3] for p in products}
+    # 本地币定价：商品基准价是美元量级，按订单国币种因子放大，
+    # 否则 COP/ARS 国家折回美元后 GMV 会被缩小几千倍（演示失真）。
+    currency_factor = {"MXN": 18.5, "COP": 3900.0, "BRL": 5.2, "ARS": 950.0,
+                       "CLP": 940.0, "PEN": 3.75, "UYU": 40.0, "USD": 1.0, "BOB": 6.9}
+    order_country = {r[0]: r[2] for r in orders_rows}  # order_id -> country_code
     item_qty = rng.integers(1, 5, size=total_items)
     items_rows = []
     order_totals: dict[int, float] = {}
     item_id = 1
     for oid, pid, qty in zip(item_order, item_product, item_qty):
-        price = round(product_price[int(pid)] * float(rng.normal(1.0, 0.05)), 2)
+        factor = currency_factor[
+            next(c[2] for c in COUNTRIES if c[0] == order_country[int(oid)])]
+        price = round(product_price[int(pid)] * factor * float(rng.normal(1.0, 0.05)), 2)
         amount = round(price * int(qty), 2)
         items_rows.append((item_id, int(oid), int(pid), int(qty), price, amount))
         order_totals[int(oid)] = round(order_totals.get(int(oid), 0.0) + amount, 2)

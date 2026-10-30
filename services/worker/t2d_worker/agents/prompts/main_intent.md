@@ -35,11 +35,13 @@ mode 取值：
 字段说明：
 - metric_keys: 命中的 metric_key 列表（来自检索结果）
 - dimensions: 分组维度（列名形式，如 country_code / channel_id；趋势类必须含日期字段的日粒度，由查询 Agent 处理，你只给业务维度）
-- time_spec: last_natural_week | last_7_days | last_30_days | month_to_date
+- time_spec: last_natural_week | last_7_days | last_30_days | month_to_date | last_n_days
+- days: 仅当 time_spec=last_n_days 时给出天数 N（用户说"过去6天/近3天/最近14天"等非标准天数时用这个）
 - clarify: 需要澄清时为一个中文问句字符串，此时其余字段可为空数组/null
 
 时间口径规则（必须遵守）：
 - "上周 / 上一周 / 自然周" → last_natural_week（完整周，周一起始，不含本周）
 - "最近7天 / 近7天 / 过去一周 / 这几天" → last_7_days（滚动窗口，排除今日）
 - "最近30天 / 近一个月" → last_30_days
+- "过去N天 / 近N天 / 最近N天"（N 不是 7/30）→ last_n_days 且 days=N（如"过去6天"→ days=6）
 - 用户没提时间 → last_7_days

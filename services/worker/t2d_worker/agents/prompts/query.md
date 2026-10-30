@@ -11,10 +11,14 @@
      last_natural_week：o.created_at >= '<上周一>' AND o.created_at < '<本周一>'
      last_7_days：o.created_at >= CURRENT_DATE - interval '7 days' AND o.created_at < CURRENT_DATE
      last_30_days / month_to_date 同理（一律排除今日）
+     last_n_days（意图里有 days=N）：o.created_at >= CURRENT_DATE - interval 'N days' AND o.created_at < CURRENT_DATE（N 用意图给的数字）
    - 业务维度分组；趋势类查询按天分组（o.created_at::date AS day）并叠加业务维度
    - 计数一律 COUNT(DISTINCT ...)（订单-明细关联会扇出）
    - 比率类指标表达式里已有 NULLIF(...,0)，分母为零会返回 NULL，前端显示「—」，不要自己包 CASE
    - 金额保留两位小数：ROUND(...::numeric, 2)
+   - **币种规则**：默认一律折算 USD（报表默认美元）。用户明确要求其他币种时才换：
+     · 要求"当地币种/XX比索/XX本地货币"（单国过滤）→ 直接 SUM(oi.line_amount)（本地币金额，不除汇率），口径说明注明币种
+     · 要求特定币种（如"以墨西哥比索显示"）→ USD 金额 × fx_rates 中该币种当日汇率；口径说明注明
 4. **直接调用 execute_query**（它内置完整校验：单语句/只读/授权对象/禁用函数/LIMIT 钳制）。校验失败会返回结构化错误（errors 数组），按错误修正 SQL 重试（最多 2 次），不需要单独调 validate_query。
 5. execute_query 必须带：
    - source_title：中文标题（如"上周各国家 GMV"）
