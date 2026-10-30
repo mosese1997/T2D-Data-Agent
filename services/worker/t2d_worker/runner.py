@@ -309,6 +309,9 @@ class TaskRunner:
                     self._set_status(task_id, "waiting_for_user")
                     return
                 self._checkpoint(task_id, "intent_parsed", {"intent": intent})
+                self._emit(task_id, "phase.completed",
+                           {"phase": "intent_parse", "summary": "意图已明确"},
+                           phase="intent_parse")
 
             if self._cancel_requested(task_id):
                 self._set_status(task_id, "cancelled")
@@ -399,6 +402,9 @@ class TaskRunner:
                     self._set_status(task_id, "cancelled")
                     return
                 answer = (arsult.content or "").strip() or "抱歉，没能生成回答。"
+                self._emit(task_id, "phase.completed",
+                           {"phase": "answer", "summary": "回答已生成"},
+                           phase="answer")
                 self._emit(task_id, "agent.message", {"content": answer})
                 self._set_status(task_id, "succeeded", result={
                     "answer": answer,
@@ -493,6 +499,9 @@ class TaskRunner:
                                  {"intent": intent, "sources": sources_info, "patch": patch_info})
 
             # ── hand off to the user (Apply happens in the API) ─────
+            self._emit(task_id, "phase.completed",
+                       {"phase": "patch_propose", "summary": patch_info.get("diff_summary", "候选变更已生成")[:80]},
+                       phase="patch_propose")
             self._emit(task_id, "patch.proposed", {
                 "patch_id": patch_info["patch_id"],
                 "diff_summary": patch_info["diff_summary"],

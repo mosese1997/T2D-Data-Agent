@@ -6,6 +6,14 @@ import PatchProposal from './PatchProposal';
 import ClarificationForm from './ClarificationForm';
 import { ErrorBox } from '../common/ui';
 
+/** 最小内联格式化：**加粗** → <strong>，其余原样（聊天气泡用） */
+function inlineBold(text: string) {
+  const parts = text.split(/\*\*([^*]+)\*\*/g);
+  return parts.map((part, i) =>
+    i % 2 === 1 ? <strong key={i}>{part}</strong> : <span key={i}>{part}</span>,
+  );
+}
+
 interface AgentPanelProps {
   workspaceId: number;
   /** null = 新建看板模式 */
@@ -82,12 +90,12 @@ export default function AgentPanel({ workspaceId, dashboardId, collapsed, onTogg
         <div className="msg-list">
           {task.messages.map((m) => (
             <div key={m.id} className={`msg ${m.role === 'user' ? 'msg-user' : 'msg-assistant'}`}>
-              {m.content}
+              {inlineBold(m.content)}
             </div>
           ))}
         </div>
 
-        {task.resultText && <div className="result-box">{task.resultText}</div>}
+        {task.resultText && <div className="result-box">{inlineBold(task.resultText)}</div>}
         {task.taskError && <ErrorBox message={`任务失败：${task.taskError}`} />}
 
         <TaskProgress phases={task.phases} status={task.status} streamState={task.streamState} active={task.active} />

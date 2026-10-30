@@ -169,6 +169,18 @@ export function useAgentTask({ workspaceId, dashboardId, onPatchApplied }: UseAg
     }
   }, []);
 
+  /** 终态兜底：任务结束时把仍挂“进行中”的阶段/工具收尾（后端漏发
+   * phase.completed 时 UI 不至于永远转圈——答案其实已经到了）。 */
+  const finalizePhases = () => {
+    setPhases((prev) =>
+      prev.map((p) =>
+        p.status === 'running'
+          ? { ...p, status: 'done', tools: p.tools.map((t) => (t.status === 'running' ? { ...t, status: 'done' } : t)) }
+          : { ...p, tools: p.tools.map((t) => (t.status === 'running' ? { ...t, status: 'done' } : t)) },
+      ),
+    );
+  };
+
   const reduceEvent = useCallback(
     (ev: SseEvent) => {
       // 按 seq 去重（重连补读 / 事件重放）
@@ -280,6 +292,7 @@ export function useAgentTask({ workspaceId, dashboardId, onPatchApplied }: UseAg
           break;
         }
         case 'task.completed': {
+          finalizePhases();
           applyStatus('succeeded');
           setResultText(describeResult(data.result));
           clearSession(sessionKey);
@@ -288,6 +301,7 @@ export function useAgentTask({ workspaceId, dashboardId, onPatchApplied }: UseAg
           break;
         }
         case 'task.failed': {
+          finalizePhases();
           applyStatus('failed');
           setTaskError(String(data.error ?? '任务执行失败'));
           clearSession(sessionKey);
@@ -295,6 +309,7 @@ export function useAgentTask({ workspaceId, dashboardId, onPatchApplied }: UseAg
           break;
         }
         case 'task.cancelled': {
+          finalizePhases();
           applyStatus('cancelled');
           clearSession(sessionKey);
           stopStream();
