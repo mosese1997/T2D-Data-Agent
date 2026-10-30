@@ -1,8 +1,32 @@
 # OpenSandbox server config (t2d compose deployment).
 # Reference: https://github.com/opensandbox-group/OpenSandbox/blob/main/server/configuration.md
+[server]
 host = "0.0.0.0"
 port = 8003
-api_key = "change-me-in-.env-sandbox-api-key"
+api_key = "t2d-sandbox-demo-key-2026"
+
+[runtime]
+type = "docker"
+execd_image = "opensandbox/execd:v1.1.0"
+
+[storage]
+allowed_host_paths = []
 
 [docker]
-# sandbox containers are created via the mounted host docker socket
+# Egress sidecar + networkPolicy require "bridge".
+network_mode = "bridge"
+# Where host-mapped ports answer FROM THE SERVER's perspective (it runs
+# in a container): must equal publish_host, else the sidecar readiness
+# probe targets 127.0.0.1 and times out (found via server source read).
+host_ip = "172.17.0.1"
+port_range_min = 40000
+port_range_max = 60000
+# The server runs INSIDE a container: sandbox ports must publish on the
+# docker bridge gateway so the server can reach them (127.0.0.1 would be
+# the server container's own loopback — unreachable).
+publish_host = "172.17.0.1"
+
+[egress]
+# deny-all networkPolicy requires the egress sidecar image (probe-verified).
+image = "opensandbox/egress:v1.1.7"
+mode = "dns"

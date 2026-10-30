@@ -189,34 +189,32 @@ def reference_value(sql: str) -> float | None:
 
 
 def task_sources(task_id: int) -> list[dict]:
-    """Actual result data of a task's execute_query calls (from files)."""
-    from t2d_db.models import FileRef, Source, ToolCall
-    from t2d_db.session import get_sessionmaker
-    from cloud_adapters.files.local_volume import LocalVolumeFileStore
+    """Actual result data of a task's execute_query calls.
 
-    files = LocalVolumeFileStore()
+    Reads via the ADMIN TRACE API + the sources rows endpoint — works
+    against ANY stack (dev or compose); no direct DB access, so the
+    runner can't read the wrong database.
+    """
+    _, admin = api("POST", "/api/auth/login",
+                   body={"username": "admin", "password": PASSWORDS["admin"]})
+    _, trace = api("GET", f"/api/admin/runs/{task_id}/trace", admin["token"])
     sources = []
-    with get_sessionmaker()() as s:
-        calls = (s.query(ToolCall)
-                 .filter(ToolCall.task_id == task_id, ToolCall.tool_name == "execute_query")
-                 .order_by(ToolCall.seq).all())
-        for call in calls:
-            sid = (call.output_json or {}).get("source_id")
-            if not sid:
-                continue
-            source = s.get(Source, int(sid))
-            if not source or not source.result_file_id:
-                continue
-            ref = s.get(FileRef, source.result_file_id)
-            try:
-                payload = json.loads(files.get(ref.storage_key))
-            except Exception:
-                continue
-            sources.append({
-                "row_count": payload.get("row_count", 0),
-                "columns": payload.get("columns", []),
-                "rows": payload.get("rows", [])[:100],
-            })
+    seen = set()
+    for call in trace.get("tool_calls", []):
+        if call.get("tool_name") != "execute_query":
+            continue
+        sid = (call.get("output") or {}).get("source_id")
+        if not sid or sid in seen:
+            continue
+        seen.add(sid)
+        code, rows = api("GET", f"/api/sources/{sid}/rows?size=100", admin["token"])
+        if code != 200:
+            continue
+        sources.append({
+            "row_count": rows.get("row_count", 0),
+            "columns": rows.get("columns", []),
+            "rows": rows.get("rows", []),
+        })
     return sources
 
 

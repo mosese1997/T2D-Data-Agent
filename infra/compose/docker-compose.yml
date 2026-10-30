@@ -42,7 +42,7 @@ services:
       MODEL_API_BASE: ${MODEL_API_BASE:-http://host.docker.internal:4000/v1}
       MODEL_API_KEY: ${MODEL_API_KEY:-change-me}
       MODEL_NAME: t2d/deepseek-v4.1-flash-1017
-      SANDBOX_SERVER: http://sandbox-server:8003
+      SANDBOX_SERVER: http://host.docker.internal:8003
       SANDBOX_API_KEY: ${SANDBOX_API_KEY:-change-me-in-.env-sandbox-api-key}
     ports:
       - "127.0.0.1:8001:8001"
@@ -70,7 +70,7 @@ services:
       MODEL_API_BASE: ${MODEL_API_BASE:-http://host.docker.internal:4000/v1}
       MODEL_API_KEY: ${MODEL_API_KEY:-change-me}
       MODEL_NAME: t2d/deepseek-v4.1-flash-1017
-      SANDBOX_SERVER: http://sandbox-server:8003
+      SANDBOX_SERVER: http://host.docker.internal:8003
       SANDBOX_API_KEY: ${SANDBOX_API_KEY:-change-me-in-.env-sandbox-api-key}
       TASK_ANALYSIS_CONCURRENCY: "2"
       SANDBOX_TIMEOUT_S: "120"
@@ -87,12 +87,13 @@ services:
       context: ../..
       dockerfile: infra/sandbox/Dockerfile
     container_name: t2d_sandbox_server
-    # The server creates sandbox containers via the host docker socket.
-    # Sandboxes themselves get NO host mounts (probe-verified).
+    # The server creates sandbox containers via the host docker socket and
+    # health-checks them on their docker0 IPs — host networking makes it
+    # host-like (the probe-verified form); bridge networking left the
+    # health check waiting 30s across incompatible docker networks.
+    network_mode: host
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-    ports:
-      - "127.0.0.1:8003:8003"
     restart: unless-stopped
 
   nginx:

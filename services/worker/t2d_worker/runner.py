@@ -273,7 +273,15 @@ class TaskRunner:
             if intent is None:
                 self._emit(task_id, "phase.started", {"phase": "intent_parse"}, phase="intent_parse")
                 messages = self._conversation_tail(brief["conversation_id"])
-                messages.append({"role": "user", "content": user_text})
+                # Prefetch semantic hits here — the intent agent doesn't need
+                # a tool round-trip for what the runner can look up directly
+                # (cuts one LLM call per task).
+                hits = self.deps.retriever.search(user_text, top_k=8)
+                hits_text = json.dumps(
+                    [{"kind": h.kind, "key": h.key, "name": h.name, "score": h.score}
+                     for h in hits], ensure_ascii=False)
+                messages.append({"role": "user", "content":
+                                 f"{user_text}\n\n（语义检索结果，按相关度排序）\n{hits_text}"})
                 if payload.get("answer"):
                     messages.append({"role": "user", "content": f"（用户补充）{payload['answer']}"})
                 result = await self._run_agent(
@@ -324,12 +332,17 @@ class TaskRunner:
                     "的按维度分组明细，列结构必须相同；purpose 分别标 current_breakdown 与 previous_breakdown。"
                     if is_analysis else ""
                 )
+                # Prefetch definitions + schema (no LLM needed for lookups —
+                # the query agent goes straight to SQL generation).
+                preloaded = self._prefetch_query_context(ctx, intent)
                 query_messages = [{
                     "role": "user",
                     "content": "分析意图 JSON：\n" + json.dumps(intent, ensure_ascii=False)
                                 + f"\n\n用户原话：{user_text}"
                                 + (f"\n关联看板 dashboard_id={dashboard_id}" if dashboard_id else "")
-                                + analysis_clause,
+                                + analysis_clause
+                                + "\n\n（已预置上下文，直接生成 SQL 调用 execute_query 即可，不需要再调 get_semantic_definition / get_authorized_schema）\n"
+                                + preloaded,
                 }]
                 qresult = await self._run_agent(
                     task_id, ctx, cancel,
@@ -493,6 +506,44 @@ class TaskRunner:
                 "code": "runner_error", "message": f"{type(exc).__name__}: {exc}"})
 
     # ── helpers ────────────────────────────────────────────────────
+    def _prefetch_query_context(self, ctx, intent: dict) -> str:
+        """Definitions + authorized schema, looked up by the runner (no LLM).
+        Saves 2-3 tool round-trips per query task."""
+        parts: list[str] = []
+        keys = [k for k in (intent.get("metric_keys") or []) if k]
+        if keys:
+            definitions = []
+            for key in keys:
+                metric = self.deps.registry.metric(key)
+                if metric:
+                    definitions.append({
+                        "metric_key": metric.metric_key, "name": metric.name,
+                        "description": metric.description,
+                        "expression": metric.expression,
+                        "base_dataset": metric.base_dataset, "grain": metric.grain,
+                        "time_field": metric.time_field,
+                        "exclusions": metric.exclusions,
+                        "currency_policy": metric.currency_policy,
+                        "available_dimensions": metric.available_dimensions,
+                        "allowed_joins": metric.allowed_joins,
+                    })
+            parts.append("指标定义：\n" + json.dumps(
+                definitions, ensure_ascii=False, indent=1))
+        try:
+            schema = self.deps.warehouse.authorized_schema(sorted(ctx.datasets))
+            # Merge semantic-layer column docs (value domains, zh→en maps).
+            yaml_datasets = self.deps.registry.bundle.datasets
+            for name, meta in schema.items():
+                doc = yaml_datasets.get(name, {}).get("columns", {})
+                for column in meta["columns"]:
+                    if column["name"] in doc:
+                        column["comment"] = doc[column["name"]]
+            parts.append("授权表结构：\n" + json.dumps(
+                schema, ensure_ascii=False, indent=1))
+        except Exception:
+            parts.append("（表结构预取失败——需要时调用 get_authorized_schema）")
+        return "\n\n".join(parts)
+
     def _answer_context(self, sources_info: list[dict]) -> list[dict]:
         """Real rows + caliber notes for the answer agent (from the DB)."""
         from t2d_db.models import FileRef, Source
