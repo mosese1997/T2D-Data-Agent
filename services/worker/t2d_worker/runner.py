@@ -22,7 +22,6 @@ from pathlib import Path
 
 from agent_adapter import AgentEvent, AgentSession, Budget, CancelToken
 from agent_adapter.events import to_sse
-from agent_adapter.toolloop import ToolLoopRuntime
 from agent_adapter.toolloop.runtime import attach_context
 from t2d_db import queue
 from t2d_db.models import (
@@ -30,7 +29,7 @@ from t2d_db.models import (
 )
 from t2d_db.session import get_sessionmaker, utcnow
 
-from .deps import WorkerDeps
+from .deps import WorkerDeps, build_runtime
 from .tools import build_tools_for
 from .tools.context import context_for_task
 
@@ -51,9 +50,9 @@ def _jsonable(value):
 
 
 class TaskRunner:
-    def __init__(self, deps: WorkerDeps, runtime: ToolLoopRuntime | None = None):
+    def __init__(self, deps: WorkerDeps, runtime=None):
         self.deps = deps
-        self.runtime = runtime or ToolLoopRuntime()
+        self.runtime = runtime or build_runtime()
         self.maker = get_sessionmaker()
 
     # ── event / trace / state plumbing ─────────────────────────────

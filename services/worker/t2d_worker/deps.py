@@ -18,6 +18,19 @@ from semantic import SemanticRetriever, load_semantics
 from t2d_db.models import AuditLog
 from t2d_db.session import get_sessionmaker
 
+def _find_repo_root() -> Path:
+    """Walk up until the repo layout is found (dev tree vs container /app
+    layouts have different depths)."""
+    here = Path(__file__).resolve()
+    for parent in here.parents:
+        if (parent / "config" / "agent" / "agent_config.yaml").is_file():
+            return parent
+    return here.parents[1]
+
+
+ROOT = _find_repo_root()
+
+
 def _find_semantic_config_dir() -> str:
     """Env var first; then walk up (dev tree AND container layouts differ:
     services/worker/t2d_worker/deps.py has 4 parents to repo root, while
@@ -47,6 +60,39 @@ class WorkerDeps:
     files: LocalVolumeFileStore
     gateway: QueryGateway
     sessionmaker: object
+
+
+def build_runtime():
+    """Runtime from config/agent/agent_config.yaml (the single switch).
+
+    toolloop is the verified default. swarmflow loads lazily — if the
+    engine isn't installed in this environment we log prominently and
+    fall back to toolloop (never crash the worker; the admin switch only
+    allows swarmflow where the engine is actually importable).
+    """
+    import yaml
+    from agent_adapter.toolloop import ToolLoopRuntime
+
+    config_path = os.environ.get(
+        "AGENT_CONFIG_PATH", str(ROOT / "config" / "agent" / "agent_config.yaml"))
+    try:
+        with open(config_path, encoding="utf-8") as f:
+            runtime_name = (yaml.safe_load(f) or {}).get("agent", {}).get(
+                "runtime", "toolloop")
+    except OSError:
+        runtime_name = "toolloop"
+
+    if runtime_name == "swarmflow":
+        try:
+            from agent_adapter.swarmflow.runtime import SwarmFlowRuntime
+
+            print("[worker] runtime: swarmflow (adapter, probe-verified)", flush=True)
+            return SwarmFlowRuntime()
+        except Exception as exc:
+            print(f"[worker] ⚠️ runtime=swarmflow 但引擎不可用（{exc}）"
+                  f"——回退 toolloop", flush=True)
+            return ToolLoopRuntime()
+    return ToolLoopRuntime()
 
 
 def build_deps() -> WorkerDeps:

@@ -22,7 +22,7 @@
 | 多轮有状态会话 | ✅ messages 列表自然多轮 | ⚠️ agent_session() 源码验证完整、未端到端实测（落地时先补验证） |
 | 流式 token | ❌（整段返回，SSE 只发阶段/摘要） | ❌（事件无 token 流）——t2d 不需要 |
 
-**决策（阶段 1 决策门）**：SwarmFlow 探测 **GO**。落地顺序：toolloop 为默认实现先行（阶段 3 端到端用它跑通）；swarmflow 适配器（swarmflow/runtime.py）在阶段 3 主链路稳定后接入，通过同一集成测试后可配置切换。两实现只依赖同一 AgentSession 契约。
+**决策（阶段 1 决策门）**：SwarmFlow 探测 **GO**。**适配器已实现并通过集成验证**（`swarmflow/runtime.py`；`scripts/test_swarmflow_adapter.py` 在 var/probe-venv 下对真实引擎 6/6：工具 JSON Schema 直注、结果捕获、事件映射、token 统计）。toolloop 保持默认；`agent_config.yaml runtime: swarmflow` 可切换——**仅当 worker 环境可 import openjiuwen**（懒加载；不可用时 worker 打警告回退 toolloop，管理台切换返回 409 并说明）。系统 Python 与 worker 镜像默认不装 workswarm（依赖 google-adk 全家桶，与 FastAPI 栈有版本冲突风险）——这是部署环境决策，不是能力缺口。
 
 ### 沙箱（OpenSandbox 1.2.0，SDK 与 Server 同版本）
 

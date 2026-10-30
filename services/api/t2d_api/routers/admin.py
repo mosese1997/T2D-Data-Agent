@@ -69,10 +69,19 @@ def switch_runtime(body: RuntimeSwitch, user: CurrentUser, db: DbDep):
     if body.runtime not in ("toolloop", "swarmflow"):
         raise HTTPException(status_code=400, detail="runtime 仅支持 toolloop | swarmflow")
     if body.runtime == "swarmflow":
-        # Honest boundary: the adapter lands after phase-3 integration tests.
-        raise HTTPException(status_code=409, detail=(
-            "swarmflow 适配器尚未接入主链路（探测 GO，见 boundaries.md）；"
-            "当前可用 runtime: toolloop"))
+        # Adapter is implemented + probe-verified; switching requires the
+        # engine to be importable in the WORKER's environment.
+        try:
+            from agent_adapter.swarmflow.runtime import available
+
+            engine_available = available()
+        except Exception:
+            engine_available = False
+        if not engine_available:
+            raise HTTPException(status_code=409, detail=(
+                "swarmflow 适配器已实现并通过集成验证，但当前环境未安装 "
+                "openjiuwen/workswarm（worker 回退 toolloop）。"
+                "安装与验证方式见 boundaries.md"))
     with open(CONFIG_PATH, encoding="utf-8") as f:
         config = yaml.safe_load(f)
     config["agent"]["runtime"] = body.runtime
