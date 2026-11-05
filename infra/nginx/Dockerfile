@@ -4,7 +4,7 @@ FROM nginx:1.27-alpine
 # Browsers that force-https get a warning-click-through instead of a dead
 # connection; generated at build time so no key is ever committed.
 RUN apk add --no-cache openssl
-ARG PUBLIC_IP=101.44.189.191
+ARG PUBLIC_IP=203.0.113.10
 RUN mkdir -p /etc/nginx/certs
 RUN openssl req -x509 -newkey rsa:2048 -nodes -days 825 \
       -keyout /etc/nginx/certs/t2d.key \

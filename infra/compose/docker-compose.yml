@@ -101,7 +101,7 @@ services:
       context: ../..
       dockerfile: infra/nginx/Dockerfile
       args:
-        PUBLIC_IP: ${PUBLIC_IP:-101.44.189.191}
+        PUBLIC_IP: ${PUBLIC_IP:-203.0.113.10}
     container_name: t2d_nginx
     depends_on:
       - api

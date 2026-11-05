@@ -8,6 +8,7 @@ export STATE_DB_URL="${STATE_DB_URL:-sqlite:///var/state.db}"
 export MODEL_API_BASE="${MODEL_API_BASE:-http://localhost:4000/v1}"
 export MODEL_NAME="${MODEL_NAME:-t2d/deepseek-v4.1-flash-1017}"
 
+# NOTE: 本地开发便利——从宿主机 litellm 栈读取模型密钥；部署环境用 .env 的 MODEL_API_KEY，不依赖此路径。
 if [ -z "${MODEL_API_KEY:-}" ]; then
   if [ -f /root/litellm/.env ]; then
     MODEL_API_KEY=$(python3 - <<'PYEOF'
