@@ -101,7 +101,7 @@ def boot_isolated_stack() -> bool:
              "--host", "127.0.0.1", "--port", str(EVAL_API_PORT)],
             env=env, cwd=ROOT,
             stdout=open(ROOT / "var" / "eval-api.log", "w"),
-            stderr=subprocess.STOUT),
+            stderr=subprocess.STDOUT),
         subprocess.Popen(
             [sys.executable, "-m", _worker_module], env=env, cwd=ROOT,
             stdout=open(ROOT / "var" / "eval-worker.log", "w"),
