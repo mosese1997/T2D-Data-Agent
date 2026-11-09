@@ -19,6 +19,8 @@ WORKDIR /app
 COPY --from=build /install /usr/local
 COPY config /app/config
 COPY services/worker/t2d_worker /app/t2d_worker
+COPY services/worker/docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
 ENV APP_DATA_DIR=/var/lib/t2d
 EXPOSE 8002
-CMD ["python", "-m", "t2d_worker.main"]
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
