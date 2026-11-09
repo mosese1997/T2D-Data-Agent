@@ -286,6 +286,280 @@ class TaskRunner:
             self._set_status(task_id, "failed", error={
                 "code": "refresh_error", "message": f"{type(exc).__name__}: {exc}"})
 
+    # ── E3: standalone phase methods (shared by inline runner & Temporal Activities) ──
+
+    async def _run_intent_phase(self, task_id: int, payload: dict) -> dict:
+        """Intent phase: parse user intent → structured result.
+
+        Returns: {intent: dict, clarify: str|None, status: str}
+        """
+        brief = self._load_task_brief(task_id)
+        checkpoint = brief["checkpoint"]
+        ctx = context_for_task(task_id)
+        cancel = CancelToken()
+        user_text = payload.get("content", "")
+
+        # Resume from checkpoint if intent already parsed
+        if checkpoint.get("step") in ("query_executed", "patch_proposed"):
+            intent = checkpoint.get("state", {}).get("intent")
+            if intent:
+                return {"intent": intent, "clarify": None, "status": "ok"}
+
+        ctx_note = self._conversation_task_context(brief["conversation_id"], task_id)
+        clarify_rounds = int(payload.get("_clarify_rounds", 0))
+
+        self._emit(task_id, "phase.started", {"phase": "intent_parse"}, phase="intent_parse")
+        messages = self._conversation_tail(brief["conversation_id"])
+        if clarify_rounds:
+            ctx_note += (f"\n（已澄清 {clarify_rounds} 轮。如仍有歧义，"
+                         "请选择最合理的解释并明确说明假设，不要继续追问。）")
+        hits = self.deps.retriever.search(user_text, top_k=8)
+        hits_text = json.dumps(
+            [{"kind": h.kind, "key": h.key, "name": h.name, "score": h.score}
+             for h in hits], ensure_ascii=False)
+        messages.append({"role": "user", "content":
+                         f"{user_text}\n\n（语义检索结果，按相关度排序）\n{hits_text}"
+                         + (f"\n\n（会话上下文）\n{ctx_note}" if ctx_note else "")})
+        if payload.get("answer"):
+            messages.append({"role": "user", "content": f"（用户补充）{payload['answer']}"})
+
+        mcp_session = self._get_mcp_session(ctx)
+        result = await self._run_agent(
+            task_id, ctx, cancel,
+            agent_name="main", prompt=_prompt("main_intent"), messages=messages,
+            tools=await self._tools_for("main", ctx, mcp_session),
+            expect_structured=True,
+            budget=Budget(max_steps=8, max_tool_calls=4),
+            show_messages=False,
+        )
+
+        if result.status != "succeeded" or not result.structured:
+            return {"intent": None, "clarify": None,
+                    "status": "failed",
+                    "error": (result.error or {}).get("message") or "意图解析失败"}
+        intent = result.structured
+        if intent.get("clarify") or intent.get("mode") == "clarify":
+            return {"intent": intent,
+                    "clarify": intent.get("clarify") or "请补充您的需求",
+                    "status": "clarify"}
+        self._checkpoint(task_id, "intent_parsed", {"intent": intent})
+        self._emit(task_id, "phase.completed",
+                   {"phase": "intent_parse", "summary": "意图已明确"},
+                   phase="intent_parse")
+        return {"intent": intent, "clarify": None, "status": "ok"}
+
+    async def _run_query_phase(self, task_id: int, intent: dict,
+                               user_text: str) -> dict:
+        """Query phase: generate + execute SQL → sources list."""
+        brief = self._load_task_brief(task_id)
+        checkpoint = brief["checkpoint"]
+        ctx = context_for_task(task_id)
+        cancel = CancelToken()
+        lang_note = _lang_note((brief["payload"] or {}).get("locale", "zh"))
+        dashboard_id = brief["dashboard_id"]
+
+        # Resume from checkpoint
+        if checkpoint.get("step") in ("query_executed", "patch_proposed"):
+            sources = checkpoint.get("state", {}).get("sources")
+            if sources is not None:
+                return {"sources": sources, "status": "ok"}
+
+        simple_modify = intent.get("mode") == "simple_modify"
+        is_analysis = intent.get("mode") == "analysis"
+        is_answer = intent.get("mode") == "answer"
+
+        if simple_modify or (is_answer and not intent.get("metric_keys")):
+            return {"sources": [], "status": "ok"}
+
+        self._emit(task_id, "phase.started", {"phase": "sql_generate"}, phase="sql_generate")
+        analysis_clause = (
+            "\n\n这是对比分析任务：请生成**两个** Source——"
+            "当期（time_spec 指定窗口）与上期（紧邻的上一可比窗口，如 last_natural_week 的上期是再上一个完整自然周）"
+            "的按维度分组明细，列结构必须相同；purpose 分别标 current_breakdown 与 previous_breakdown。"
+            if is_analysis else ""
+        )
+        preloaded = self._prefetch_query_context(ctx, intent)
+        query_messages = [{
+            "role": "user",
+            "content": "分析意图 JSON：\n" + json.dumps(intent, ensure_ascii=False)
+                        + f"\n\n用户原话：{user_text}"
+                        + (f"\n关联看板 dashboard_id={dashboard_id}" if dashboard_id else "")
+                        + analysis_clause
+                        + "\n\n（已预置上下文，直接生成 SQL 调用 execute_query 即可，不需要再调 get_semantic_definition / get_authorized_schema）\n"
+                        + preloaded,
+        }]
+        mcp_session = self._get_mcp_session(ctx)
+        qresult = await self._run_agent(
+            task_id, ctx, cancel,
+            agent_name="query", prompt=_prompt("query") + lang_note, messages=query_messages,
+            tools=await self._tools_for("query", ctx, mcp_session,
+                                  cancel_check=lambda: self._cancel_requested(task_id)),
+            expect_structured=True,
+            budget=Budget(max_steps=24, max_tool_calls=14),
+            show_messages=False,
+        )
+
+        if qresult.status == "cancelled":
+            return {"sources": None, "status": "cancelled"}
+        exec_result = qresult.tool_results.get("execute_query")
+        if qresult.status != "succeeded" or not exec_result or "source_id" not in exec_result:
+            message = (qresult.structured or {}).get("error") \
+                      or (qresult.error or {}).get("message") \
+                      or "查询生成失败"
+            return {"sources": None, "status": "failed", "error": message}
+
+        sources_info = self._validated_sources(
+            task_id, ctx, qresult.structured or {}, exec_result)
+        self._checkpoint(task_id, "query_executed",
+                         {"intent": intent, "sources": sources_info})
+        total_rows = sum(s["row_count"] for s in sources_info)
+        self._emit(task_id, "phase.completed",
+                   {"phase": "sql_generate",
+                    "summary": f"查询成功，{len(sources_info)} 个 Source / {total_rows} 行"},
+                   phase="sql_generate")
+        return {"sources": sources_info, "status": "ok"}
+
+    async def _run_design_phase(self, task_id: int, intent: dict,
+                                sources: list, user_text: str,
+                                dashboard_id: int) -> dict:
+        """Design phase: propose dashboard patch."""
+        brief = self._load_task_brief(task_id)
+        ctx = context_for_task(task_id)
+        cancel = CancelToken()
+        lang_note = _lang_note((brief["payload"] or {}).get("locale", "zh"))
+
+        dashboard_id = dashboard_id or self._ensure_dashboard(task_id, ctx, user_text)
+        self._emit(task_id, "phase.started", {"phase": "patch_propose"}, phase="patch_propose")
+        existing = self._canvas_summary(dashboard_id)
+        design_messages = [{
+            "role": "user",
+            "content":
+                f"用户需求：{user_text}\n"
+                f"看板 dashboard_id：{dashboard_id}\n"
+                f"看板现有组件（新组件 id 必须避开这些）：\n"
+                + json.dumps(existing, ensure_ascii=False, default=str)
+                + f"\n\nSource 列表：\n" + json.dumps(sources, ensure_ascii=False, default=str),
+        }]
+        mcp_session = self._get_mcp_session(ctx)
+        dresult = await self._run_agent(
+            task_id, ctx, cancel,
+            agent_name="main", prompt=_prompt("main_design") + lang_note,
+            messages=design_messages,
+            tools=await self._tools_for("main", ctx, mcp_session),
+            budget=Budget(max_steps=8, max_tool_calls=4),
+        )
+
+        if dresult.status == "cancelled":
+            return {"patch": None, "status": "cancelled", "dashboard_id": dashboard_id}
+
+        patch_info = self._validated_patch(task_id, dashboard_id)
+        if patch_info is None:
+            text = (dresult.content or "").strip()
+            if dresult.status == "succeeded" and len(text) >= 10:
+                return {"patch": None, "status": "clarify",
+                        "clarify_text": text, "dashboard_id": dashboard_id}
+            patch_result = dresult.tool_results.get("propose_dashboard_patch") or {}
+            return {"patch": None, "status": "failed",
+                    "error": patch_result.get("_summary") or "候选变更生成失败",
+                    "dashboard_id": dashboard_id}
+
+        self._checkpoint(task_id, "patch_proposed",
+                         {"intent": intent, "sources": sources, "patch": patch_info})
+        self._emit(task_id, "phase.completed",
+                   {"phase": "patch_propose",
+                    "summary": patch_info.get("diff_summary", "候选变更已生成")[:80]},
+                   phase="patch_propose")
+        self._emit(task_id, "patch.proposed", {
+            "patch_id": patch_info["patch_id"],
+            "diff_summary": patch_info["diff_summary"],
+            "preview_canvas": patch_info.get("preview_canvas"),
+        }, phase="patch_propose")
+        return {"patch": patch_info, "status": "ok", "dashboard_id": dashboard_id}
+
+    async def _run_analysis_phase(self, task_id: int, intent: dict,
+                                  sources: list, user_text: str) -> dict:
+        """Analysis phase: sandbox contribution decomposition."""
+        brief = self._load_task_brief(task_id)
+        ctx = context_for_task(task_id)
+        cancel = CancelToken()
+        lang_note = _lang_note((brief["payload"] or {}).get("locale", "zh"))
+
+        self._emit(task_id, "phase.started", {"phase": "analysis"}, phase="analysis")
+        analysis_messages = [{
+            "role": "user",
+            "content":
+                f"用户问题：{user_text}\n"
+                f"Source 列表：\n" + json.dumps(sources, ensure_ascii=False, default=str),
+        }]
+        mcp_session = self._get_mcp_session(ctx)
+        aresult = await self._run_agent(
+            task_id, ctx, cancel,
+            agent_name="analysis", prompt=_prompt("analysis") + lang_note,
+            messages=analysis_messages,
+            tools=await self._tools_for("analysis", ctx, mcp_session,
+                                  cancel_check=lambda: self._cancel_requested(task_id)),
+            budget=Budget(max_steps=16, max_tool_calls=10),
+        )
+
+        if aresult.status == "cancelled":
+            return {"analysis": None, "status": "cancelled"}
+        run_result = aresult.tool_results.get("run_analysis")
+        if aresult.status != "succeeded" or not run_result or "analysis_id" not in run_result:
+            return {"analysis": None, "status": "failed",
+                    "error": (aresult.error or {}).get("message") or "分析执行失败"}
+        self._emit(task_id, "phase.completed",
+                   {"phase": "analysis",
+                    "summary": run_result.get("_summary", "分析完成")},
+                   phase="analysis")
+        return {"analysis": run_result, "conclusion": aresult.content,
+                "status": "ok"}
+
+    async def _run_answer_phase(self, task_id: int, user_text: str,
+                                sources: list, ctx_note: str) -> dict:
+        """Answer phase: conversational reply from query results."""
+        brief = self._load_task_brief(task_id)
+        ctx = context_for_task(task_id)
+        cancel = CancelToken()
+        lang_note = _lang_note((brief["payload"] or {}).get("locale", "zh"))
+
+        sources = sources or []
+        answer_context = self._answer_context(sources)
+        self._emit(task_id, "phase.started", {"phase": "answer"}, phase="answer")
+        answer_messages = [{
+            "role": "user",
+            "content": f"用户问题：{user_text}\n\n查询结果（可能为空=没有查到数据或闲聊）：\n"
+                        + json.dumps(answer_context, ensure_ascii=False, default=str)
+                        + (f"\n\n（会话上下文——回答指代性问题如\"为什么失败\"时据此说明）\n{ctx_note}"
+                           if ctx_note else ""),
+        }]
+        arsult = await self._run_agent(
+            task_id, ctx, cancel,
+            agent_name="main", prompt=_prompt("main_answer") + lang_note,
+            messages=answer_messages, tools=[],
+            budget=Budget(max_steps=4, max_tool_calls=0),
+        )
+        if arsult.status == "cancelled":
+            return {"answer": None, "status": "cancelled"}
+        answer = (arsult.content or "").strip() or "抱歉，没能生成回答。"
+        self._emit(task_id, "phase.completed",
+                   {"phase": "answer", "summary": "回答已生成"},
+                   phase="answer")
+        return {"answer": answer,
+                "sources": [s["source_id"] for s in sources],
+                "status": "ok"}
+
+    def _get_mcp_session(self, ctx):
+        """Get an MCP session if tools mode is mcp; None for inline."""
+        if _tools_mode() != "mcp":
+            return None
+        from agent_adapter.mcp_client import McpToolSession
+        try:
+            return McpToolSession(
+                os.environ.get("T2D_MCP_URL", "http://127.0.0.1:9100/mcp"), ctx)
+        except Exception:
+            return None
+
+
     async def run_build_task(self, task_id: int) -> None:
         brief = self._load_task_brief(task_id)
         payload = brief["payload"]
