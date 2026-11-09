@@ -47,8 +47,10 @@ def _prompt(name: str) -> str:
 def _tools_mode() -> str:
     """inline | mcp — from agent_config.yaml (E1 dual-track)."""
     import yaml
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[2]
     config_path = os.environ.get(
-        "AGENT_CONFIG_PATH", str(ROOT / "config" / "agent" / "agent_config.yaml"))
+        "AGENT_CONFIG_PATH", str(root / "config" / "agent" / "agent_config.yaml"))
     try:
         with open(config_path, encoding="utf-8") as f:
             return (yaml.safe_load(f) or {}).get("agent", {}).get("tools", "inline")
