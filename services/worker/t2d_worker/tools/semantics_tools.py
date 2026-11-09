@@ -6,6 +6,8 @@ never sees datasets the workspace isn't granted.
 
 from __future__ import annotations
 
+import os
+
 from agent_adapter import Tool, ToolContext, ToolError
 
 
@@ -69,6 +71,14 @@ def build_semantics_tools(ctx: ToolContext, deps) -> list[Tool]:
             for column in meta["columns"]:
                 if column["name"] in doc:
                     column["comment"] = doc[column["name"]]
+        # E2: best-effort OM enrichment (tags/owner from OpenMetadata;
+        # OM unreachable → schema still valid from the layers above)
+        if os.environ.get("OM_PASSWORD"):
+            try:
+                from cloud_adapters.om_enrich import enrich_schema
+                enrich_schema(schema)
+            except Exception:
+                pass
         return {"datasets": schema, "demo_mode": c.demo_mode,
                 "_summary": f"返回 {len(schema)} 个数据集结构"}
 

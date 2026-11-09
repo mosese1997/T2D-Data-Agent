@@ -189,6 +189,24 @@ services:
       - "8586:8586"
 
 
+  # ── E3: Temporal (持久化工作流编排) ──
+  # 开发服务器：单容器（内存库 + 内置 UI :8082）
+  # 生产形态（auto-setup + PG）在 E3 稳定后切换
+  temporal:
+    container_name: t2d_temporal
+    image: temporalio/temporal:1.10.0
+    restart: always
+    command: ["server", "start-dev", "--ip", "0.0.0.0", "--port", "7233", "--ui-port", "8082"]
+    ports:
+      - "7233:7233"
+      - "8082:8082"
+    healthcheck:
+      test: ["CMD", "temporal", "operator", "search-attribute", "list", "--address", "localhost:7233"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+
 volumes:
   t2d_biz_pgdata:
   t2d_om_mysql:
