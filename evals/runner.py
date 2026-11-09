@@ -85,15 +85,25 @@ def boot_isolated_stack() -> bool:
         if proc.returncode != 0:
             print(f"❌ 隔离栈初始化失败（{label}）:\n{proc.stderr[-800:]}")
             return False
+    # E3: start the right worker for the queue mode
+    import yaml as _yaml
+    _cfg = ROOT / "config" / "agent" / "agent_config.yaml"
+    try:
+        with open(_cfg) as _f:
+            _queue_mode = (_yaml.safe_load(_f) or {}).get("agent", {}).get("queue", "sqlite")
+    except Exception:
+        _queue_mode = "sqlite"
+    _worker_module = "t2d_worker.temporal_worker" if _queue_mode == "temporal" else "t2d_worker.main"
+
     procs = [
         subprocess.Popen(
             [sys.executable, "-m", "uvicorn", "t2d_api.main:app",
              "--host", "127.0.0.1", "--port", str(EVAL_API_PORT)],
             env=env, cwd=ROOT,
             stdout=open(ROOT / "var" / "eval-api.log", "w"),
-            stderr=subprocess.STDOUT),
+            stderr=subprocess.STOUT),
         subprocess.Popen(
-            [sys.executable, "-m", "t2d_worker.main"], env=env, cwd=ROOT,
+            [sys.executable, "-m", _worker_module], env=env, cwd=ROOT,
             stdout=open(ROOT / "var" / "eval-worker.log", "w"),
             stderr=subprocess.STDOUT),
     ]
