@@ -44,6 +44,18 @@ def _prompt(name: str) -> str:
     return (PROMPTS_DIR / f"{name}.md").read_text(encoding="utf-8").replace("{brand}", BRAND)
 
 
+def _tools_mode() -> str:
+    """inline | mcp — from agent_config.yaml (E1 dual-track)."""
+    import yaml
+    config_path = os.environ.get(
+        "AGENT_CONFIG_PATH", str(ROOT / "config" / "agent" / "agent_config.yaml"))
+    try:
+        with open(config_path, encoding="utf-8") as f:
+            return (yaml.safe_load(f) or {}).get("agent", {}).get("tools", "inline")
+    except OSError:
+        return "inline"
+
+
 def _lang_note(locale: str) -> str:
     """Language instruction for user-facing agents (answers, titles,
     caliber notes, change summaries follow the UI language)."""
@@ -281,6 +293,16 @@ class TaskRunner:
         user_text = payload.get("content", "")
         lang_note = _lang_note(payload.get("locale", "zh"))
         dashboard_id = brief["dashboard_id"]
+        mcp_session = None
+        if _tools_mode() == "mcp":
+            from agent_adapter.mcp_client import McpToolSession
+            mcp_session = McpToolSession(
+                os.environ.get("T2D_MCP_URL", "http://127.0.0.1:9100/mcp"), ctx)
+            try:
+                await mcp_session._connect()
+            except Exception as exc:
+                print(f"[worker] ⚠️ MCP server 不可达（{exc}）——回退 inline 工具", flush=True)
+                mcp_session = None
 
         try:
             if self._cancel_requested(task_id):
@@ -319,7 +341,7 @@ class TaskRunner:
                 result = await self._run_agent(
                     task_id, ctx, cancel,
                     agent_name="main", prompt=_prompt("main_intent"), messages=messages,
-                    tools=build_tools_for("main", ctx, self.deps),
+                    tools=await self._tools_for("main", ctx, mcp_session),
                     expect_structured=True,
                     budget=Budget(max_steps=8, max_tool_calls=4),
                     show_messages=False,  # 意图 JSON 是过程输出，不进聊天
@@ -402,7 +424,7 @@ class TaskRunner:
                 qresult = await self._run_agent(
                     task_id, ctx, cancel,
                     agent_name="query", prompt=_prompt("query") + lang_note, messages=query_messages,
-                    tools=build_tools_for("query", ctx, self.deps,
+                    tools=await self._tools_for("query", ctx, mcp_session,
                                           cancel_check=lambda: self._cancel_requested(task_id)),
                     expect_structured=True,
                     budget=Budget(max_steps=24, max_tool_calls=14),
@@ -485,7 +507,7 @@ class TaskRunner:
                     task_id, ctx, cancel,
                     agent_name="analysis", prompt=_prompt("analysis") + lang_note,
                     messages=analysis_messages,
-                    tools=build_tools_for("analysis", ctx, self.deps,
+                    tools=await self._tools_for("analysis", ctx, mcp_session,
                                           cancel_check=lambda: self._cancel_requested(task_id)),
                     budget=Budget(max_steps=16, max_tool_calls=10),
                 )
@@ -535,7 +557,7 @@ class TaskRunner:
                     task_id, ctx, cancel,
                     agent_name="main", prompt=_prompt("main_design") + lang_note,
                     messages=design_messages,
-                    tools=build_tools_for("main", ctx, self.deps),
+                    tools=await self._tools_for("main", ctx, mcp_session),
                     budget=Budget(max_steps=8, max_tool_calls=4),
                 )
                 if dresult.status == "cancelled":
@@ -581,6 +603,12 @@ class TaskRunner:
         except Exception as exc:  # noqa: BLE001 — the runner must never crash the worker
             self._set_status(task_id, "failed", error={
                 "code": "runner_error", "message": f"{type(exc).__name__}: {exc}"})
+        finally:
+            if mcp_session is not None:
+                try:
+                    await mcp_session.close()
+                except Exception:
+                    pass
 
     # ── helpers ────────────────────────────────────────────────────
     def _conversation_task_context(self, conversation_id: int | None,
@@ -602,6 +630,13 @@ class TaskRunner:
             if prev.status == "failed" and prev.error:
                 return (f"上一个任务（#{prev.id}）失败：{prev.error.get('message', '')[:150]}")
             return f"上一个任务（#{prev.id}）状态：{prev.status}"
+
+    async def _tools_for(self, agent_name: str, ctx, mcp_session,
+                         cancel_check=None):
+        """Inline tools (1.0) or MCP-wrapped tools (E1 dual-track)."""
+        if mcp_session is not None:
+            return await mcp_session.load_tools()
+        return build_tools_for(agent_name, ctx, self.deps, cancel_check=cancel_check)
 
     def _canvas_summary(self, dashboard_id: int) -> list[dict]:
         """Existing component ids/titles/types — the design agent needs them
