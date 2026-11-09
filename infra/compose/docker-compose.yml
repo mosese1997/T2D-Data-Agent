@@ -111,6 +111,86 @@ services:
       - "8443:443"    # 自签 HTTPS（443 被宿主 sshd 备用通道占用，改用 8443）
     restart: unless-stopped
 
+  # ── E2: OpenMetadata (元数据中心) ──
+  # 精简部署：MySQL + ES + server（无 ingestion 镜像；摄取走 REST API 脚本）
+  openmetadata-mysql:
+    container_name: openmetadata_mysql
+    image: docker.getcollate.io/openmetadata/db:2.0.7
+    command: "--sort_buffer_size=10M"
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${OM_MYSQL_ROOT_PASSWORD:-password}
+    expose:
+      - "3306"
+    volumes:
+      - t2d_om_mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysql", "--user=root", "--password=$$MYSQL_ROOT_PASSWORD", "--silent", "--execute", "use openmetadata_db"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
+  openmetadata-es:
+    container_name: openmetadata_elasticsearch
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.3.0
+    restart: always
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms1024m -Xmx1024m
+      - xpack.security.enabled=false
+    expose:
+      - "9200"
+    volumes:
+      - t2d_om_es:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -qE 'green|yellow' || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
+  openmetadata-server:
+    container_name: openmetadata_server
+    image: docker.getcollate.io/openmetadata/server:2.0.7
+    restart: always
+    depends_on:
+      openmetadata-mysql:
+        condition: service_healthy
+      openmetadata-es:
+        condition: service_healthy
+    environment:
+      OPENMETADATA_CLUSTER_NAME: openmetadata
+      SERVER_PORT: "8585"
+      SERVER_ADMIN_PORT: "8586"
+      LOG_LEVEL: INFO
+      DB_DRIVER_CLASS: com.mysql.cj.jdbc.Driver
+      DB_SCHEME: mysql
+      DB_USER: openmetadata_user
+      DB_USER_PASSWORD: ${OM_DB_PASSWORD:-openmetadata_password}
+      DB_HOST: openmetadata-mysql
+      DB_PORT: "3306"
+      DB_SCHEMA: openmetadata_db
+      ES_HOST: openmetadata-es
+      ES_PORT: "9200"
+      AUTHORIZER_CLASS_NAME: org.openmetadata.service.security.DefaultAuthorizer
+      AUTHORIZER_REQUEST_FILTER: org.openmetadata.service.security.JwtFilter
+      AUTHORIZER_ADMIN_PRINCIPALS: "[admin]"
+      AUTHORIZER_ALLOWED_REGISTRATION_DOMAIN: '["all"]'
+      AUTHORIZER_PRINCIPAL_DOMAIN: '"open-metadata.org"'
+      AUTHORIZER_ENFORCE_PRINCIPAL_DOMAIN: "false"
+      AUTHENTICATION_PROVIDER: basic
+      AUTHENTICATION_RESPONSE_TYPE: id_token
+      AUTHENTICATION_PUBLIC_KEYS: '[http://localhost:8585/api/v1/system/config/jwks]'
+      AUTHENTICATION_AUTHORITY: https://accounts.google.com
+      AUTHENTICATION_JWT_PRINCIPAL_CLAIMS: '[email,preferred_username,sub]'
+      AUTHENTICATION_ENABLE_SELF_SIGNUP: "true"
+      AUTHENTICATION_CLIENT_TYPE: public
+    ports:
+      - "8585:8585"
+      - "8586:8586"
+
+
 volumes:
   t2d_biz_pgdata:
+  t2d_om_mysql:
+  t2d_om_es:
   t2d_appdata:

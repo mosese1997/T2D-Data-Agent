@@ -84,6 +84,16 @@ def build_query_tools(ctx: ToolContext, deps, *, cancel_check=None) -> list[Tool
             s.add(source)
             s.commit()
             source_id = source.id
+        # E2: best-effort lineage write to OpenMetadata (never blocks)
+        if os.environ.get("OM_PASSWORD"):
+            try:
+                from cloud_adapters.om_lineage import record_query_lineage
+                record_query_lineage(
+                    source_id=source_id, source_title=title,
+                    tables=result.objects_referenced, sql=final_sql)
+            except Exception:
+                pass
+
         return {
             "source_id": source_id,
             "columns": result.columns,
