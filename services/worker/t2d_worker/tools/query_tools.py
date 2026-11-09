@@ -8,6 +8,7 @@ source_id is what dashboard components bind to.
 from __future__ import annotations
 
 import json
+import os
 import time
 
 from agent_adapter import Tool, ToolContext, ToolError

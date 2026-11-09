@@ -15,7 +15,8 @@ import os
 import sys
 
 from concurrent.futures import ThreadPoolExecutor
-from temporalio.client import Client, WorkflowIDReusePolicy
+from temporalio.client import Client
+from temporalio.common import WorkflowIDReusePolicy
 from temporalio.worker import Worker, UnsandboxedWorkflowRunner
 
 from .temporal_workflows import (
@@ -26,6 +27,7 @@ from .temporal_workflows import (
     run_design_phase,
     run_analysis_phase,
     run_answer_phase,
+    finalize_task,
 )
 
 TASK_QUEUE = "t2d-tasks"
@@ -42,7 +44,7 @@ async def main() -> None:
         task_queue=TASK_QUEUE,
         workflows=[BuildDashboardWorkflow, RefreshWorkflow],
         activities=[run_intent_phase, run_query_phase, run_design_phase,
-                    run_analysis_phase, run_answer_phase],
+                    run_analysis_phase, run_answer_phase, finalize_task],
         activity_executor=ThreadPoolExecutor(4),
         workflow_runner=UnsandboxedWorkflowRunner(),
     )

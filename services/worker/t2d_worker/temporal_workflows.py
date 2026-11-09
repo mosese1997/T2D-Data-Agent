@@ -84,6 +84,15 @@ async def run_answer_phase(task_id: int, user_text: str, sources: list,
     return result
 
 
+@activity.defn
+async def finalize_task(task_id: int, status: str, result: dict) -> None:
+    """Update the task row's final status (called by the workflow at the end)."""
+    from .runner import TaskRunner
+    from .deps import build_deps
+    runner = TaskRunner(build_deps())
+    runner._set_status(task_id, status, result=result)
+
+
 @workflow.defn
 class BuildDashboardWorkflow:
     """Maps the runner's build/modify task state machine.
@@ -101,36 +110,49 @@ class BuildDashboardWorkflow:
         user_text = payload.get("content", "")
         dashboard_id = payload.get("dashboard_id")
 
-        # Phase 1: Intent
-        intent = await workflow.execute_activity(
+        # Phase 1: Intent (activity returns {intent, clarify, status})
+        intent_result = await workflow.execute_activity(
             run_intent_phase, args=[task_id, payload],
             start_to_close_timeout=timedelta(seconds=120))
-        if intent.get("clarify"):
+        if intent_result.get("status") == "clarify":
             # Signal wait: waiting_for_user
             await workflow.wait_condition(lambda: self._user_answer is not None)
-            # Re-run intent with the answer
             payload["answer"] = self._user_answer
-            intent = await workflow.execute_activity(
+            intent_result = await workflow.execute_activity(
                 run_intent_phase, args=[task_id, payload],
                 start_to_close_timeout=timedelta(seconds=120))
-            if intent.get("clarify"):
-                return {"status": "clarify_exhausted", "question": intent["clarify"]}
+            if intent_result.get("status") == "clarify":
+                return {"status": "clarify_exhausted",
+                        "question": intent_result.get("clarify")}
+        if intent_result.get("status") == "failed":
+            return {"status": "failed", "error": intent_result.get("error")}
+        intent = intent_result.get("intent", {})
+        mode = intent.get("mode", "")
 
-        # Phase 2: Query
-        sources = await workflow.execute_activity(
+        # Phase 2: Query (returns {sources, status})
+        query_result = await workflow.execute_activity(
             run_query_phase, args=[task_id, intent, user_text],
             start_to_close_timeout=timedelta(seconds=300))
+        if query_result.get("status") == "failed":
+            return {"status": "failed", "error": query_result.get("error")}
+        sources = query_result.get("sources", [])
 
-        # Phase 3: Design or Analysis (based on intent mode)
-        if intent.get("mode") == "analysis":
+        # Phase 3: route by intent mode
+        if mode == "analysis":
             result = await workflow.execute_activity(
                 run_analysis_phase, args=[task_id, intent, sources, user_text],
                 start_to_close_timeout=timedelta(seconds=300))
+            await workflow.execute_activity(
+                finalize_task, args=[task_id, "succeeded", result],
+                start_to_close_timeout=timedelta(seconds=30))
             return {"status": "succeeded", "result": result}
-        elif intent.get("mode") == "answer":
+        elif mode == "answer":
             result = await workflow.execute_activity(
                 run_answer_phase, args=[task_id, user_text, sources, ""],
                 start_to_close_timeout=timedelta(seconds=120))
+            await workflow.execute_activity(
+                finalize_task, args=[task_id, "succeeded", result],
+                start_to_close_timeout=timedelta(seconds=30))
             return {"status": "succeeded", "result": result}
         else:
             # Build/modify: design → waiting_for_apply
@@ -138,11 +160,19 @@ class BuildDashboardWorkflow:
                 run_design_phase,
                 args=[task_id, intent, sources, user_text, dashboard_id or 0],
                 start_to_close_timeout=timedelta(seconds=120))
-            if result.get("clarify"):
+            if result.get("status") == "clarify":
                 await workflow.wait_condition(lambda: self._user_answer is not None)
-                return {"status": "clarify", "question": result["clarify"]}
+                return {"status": "clarify", "question": result.get("clarify_text")}
+            if result.get("status") == "failed":
+                return {"status": "failed", "error": result.get("error")}
             # Signal wait: waiting_for_apply
             await workflow.wait_condition(lambda: self._applied)
+            # Finalize: update the task row
+            await workflow.execute_activity(
+                finalize_task, args=[task_id, "succeeded",
+                                     {"patch_id": result.get("patch", {}).get("patch_id"),
+                                      "dashboard_id": result.get("dashboard_id")}],
+                start_to_close_timeout=timedelta(seconds=30))
             return {"status": "succeeded", "result": result}
 
     @workflow.signal
