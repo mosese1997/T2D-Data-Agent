@@ -1,0 +1,21 @@
+[project]
+name = "t2d-mcp-server"
+version = "0.1.0"
+description = "t2d DWS MCP server: data tools over MCP with governance built in"
+requires-python = ">=3.12"
+dependencies = [
+  "mcp>=2.3,<3",
+  "t2d-db",
+  "agent-adapter",
+  "cloud-adapters",
+  "semantic",
+  "query-gateway",
+  "dashboard-schema",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["t2d_mcp_server*"]

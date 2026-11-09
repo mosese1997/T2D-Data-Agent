@@ -24,7 +24,7 @@ def utcnow() -> datetime:
 class ToolContext:
     """Server-injected identity & permission scope for one task run."""
 
-    task_id: int
+    task_id: int | None  # None = 无关联任务（MCP 直连等场景）
     user_id: int
     workspace_id: int
     role: str  # admin | analyst | viewer

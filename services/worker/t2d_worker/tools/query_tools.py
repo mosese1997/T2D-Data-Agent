@@ -65,7 +65,8 @@ def build_query_tools(ctx: ToolContext, deps, *, cancel_check=None) -> list[Tool
                 kind="source_result", storage_key=meta.storage_key,
                 mime="application/json", size_bytes=meta.size_bytes,
                 sha256=meta.sha256, workspace_id=c.workspace_id,
-                created_by=c.user_id, task_id=c.task_id,
+                created_by=c.user_id,
+                task_id=c.task_id if c.task_id else None,
             )
             s.add(file_ref)
             s.flush()
@@ -74,7 +75,8 @@ def build_query_tools(ctx: ToolContext, deps, *, cancel_check=None) -> list[Tool
                 sql_text=result.normalized_sql, params_json=params,
                 col_schema=result.columns, row_count=result.row_count,
                 result_file_id=file_ref.id, status="active",
-                created_by=c.user_id, task_id=c.task_id,
+                created_by=c.user_id,
+                task_id=c.task_id if c.task_id else None,
                 caliber_notes={"notes": args.get("caliber_notes", [])},
                 semantic_refs={"refs": args.get("semantic_refs", []),
                                "semantic_version": deps.registry.version},
