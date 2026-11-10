@@ -69,12 +69,11 @@
 - **崩溃测试**：SIGKILL → 重启 → 4 Activity 恰好一次
 - compose worker 双模式 entrypoint（docker-entrypoint.sh）
 
-### E4: OpenJiuwen 转正 ✅（核心）
+### E4: OpenJiuwen 转正 ⚠️（部分完成）
 - workswarm 安装进系统 Python（依赖冲突解决：mcp 2.x + temporalio + fastapi + openjiuwen 共存）
 - SwarmFlow 适配器集成测试 6/6（工具注入/结果捕获/事件映射/token 统计）
-- Runtime 切换为 swarmflow（默认）
 - 冒烟 4/4（基础问数精确命中）
-- 全量评测（进行中）
+- **全管线集成缺口**：SwarmFlow 工作流返回的 structured output 格式与 runner phase 方法期望的格式不匹配——工作流完成但任务状态不更新。toolloop 保持为默认 runtime，SwarmFlow 待修复后转正（boundaries.md 已记录）
 
 ## 待完成
 

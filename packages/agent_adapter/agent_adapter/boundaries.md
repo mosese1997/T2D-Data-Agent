@@ -89,6 +89,8 @@
 - 2.x API 与大量 v1 教材不同（MCPServer 改名、2元组、headers 经 http_client 注入）
 - FileRef/Source 的 task_id=0 须转 None（FK 到 tasks 表）
 - ToolError 必须在 _call 层捕获返回结构化 payload（否则 SDK 包成无用的 "Error executing tool"）
+- **隔离评测栈不兼容**：MCP server 验证身份对照主状态库，隔离栈的一次性状态库的 user/workspace ID 与主库不一致 → 所有 MCP 工具调用被拒。隔离评测必须用 tools: inline。
+- **MCP server 是有状态服务**：绑定特定状态库运行，不支持多状态库隔离。生产部署时 MCP server 与 API/worker 共享状态库——这是设计边界，不是 bug。
 
 ### Temporal
 - timeout 必须用 timedelta（int 在当前 protobuf 下抛 TypeError）
