@@ -41,3 +41,4 @@ logs/
 .DS_Store
 .idea/
 .vscode/
+infra/e0-openmetadata/docker-volume/
