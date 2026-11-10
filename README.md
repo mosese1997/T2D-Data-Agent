@@ -1,6 +1,6 @@
 # t2d — Agentic Talk to Data
 
-**English TL;DR** — t2d is a fully working demo of an agentic "talk-to-data" product: ask questions in natural language (Chinese or English), and a multi-agent system understands your intent, generates and executes governed SQL against a semantic layer, builds/edits dashboards through reviewable patches, runs sandboxed contribution analyses, and explains its own failures. React + FastAPI + ECharts, SQLite-first with zero-change MySQL migration, Docker Compose one-command boot, 38-case eval suite (basic-ask accuracy 100%), 50-step user-journey regression, bilingual UI. [详细中文介绍见下 ↓](#t2d--agentic-talk-to-data-数据产品)
+**English TL;DR** — t2d is a fully working demo of an agentic "talk-to-data" product: ask questions in natural language (Chinese or English), and a multi-agent system understands your intent, generates and executes governed SQL against a semantic layer, builds/edits dashboards through reviewable patches, runs sandboxed contribution analyses, and explains its own failures. **2.0 architecture**: data access via MCP protocol, orchestration via Temporal durable workflows, metadata via OpenMetadata, agent framework via OpenJiuwen SwarmFlow. React + FastAPI + ECharts, SQLite-first with zero-change MySQL migration, Docker Compose one-command boot, 38-case eval suite, 50-step user-journey regression, bilingual UI. [详细中文介绍见下 ↓](#t2d--agentic-talk-to-data-数据产品)
 
 ---
 
@@ -57,25 +57,45 @@ docker compose -f infra/compose/docker-compose.yml up -d
 
 > **演示数据模式**：未配置华为云 DWS/CSS/OBS 凭据时自动使用本地适配器（Postgres 模拟 DWS、本地混合检索模拟 CSS、本地卷模拟 OBS），界面显著标识。适配器双实现——凭据到位后改 `.env` 即切换，代码零改动。
 
-## 🏗️ 架构
+## 🏗️ 架构（2.0）
 
 ```
-浏览器 ──HTTP──▶ Nginx(:8080) ── /api/ ──▶ FastAPI(:8001) ──SSE──▶ 任务进度
-                                              │
-                 Agent Worker(:8002) ◀── 持久化任务队列（SQLite/MySQL，租约+心跳+检查点）
-                  ├─ 主 Agent（意图路由/设计/应答）
-                  ├─ 查询 Sub-agent（语义→SQL→网关→Source）
-                  └─ 分析 Sub-agent（沙箱贡献分解）
-                 9 个工具，身份由服务端注入（模型无法伪造）
-                                              │
-      OpenSandbox(:8003, 1vCPU/1GiB/禁网)   业务 Postgres(:5434, 模拟 DWS)
+浏览器 ──▶ Nginx(:8080) ──▶ FastAPI(:8001) ──SSE──▶ 任务进度
+                                  │
+         ┌────────────────────────┼────────────────────────┐
+         │                        │                        │
+    Temporal(:7233)         MCP Server(:9100)       OpenMetadata(:8585)
+    工作流编排               数据访问（治理内置）      元数据中心
+         │                        │                        │
+    Temporal Worker          查询网关 + 语义层         Glossary + 血缘
+    (SwarmFlow runtime)    (白名单/限流/审计)         + 表结构 + enrichment
+         │                        │                        │
+         └──────────┬─────────────┘                        │
+                    │                                      │
+              业务 Postgres(:5434)                   OM MySQL + ES
+              (模拟 DWS, 10 表)                      (元数据存储)
+                    │
+              OpenSandbox(:8003)
+              (沙箱分析, 1vCPU/1GiB/禁网)
 ```
+
+**2.0 关键变更**：
+
+| 层 | 1.0 | 2.0 |
+|---|---|---|
+| 数据访问 | 进程内 Python 函数 | **MCP 协议**（:9100）——治理随协议走，任何 MCP 客户端受同样白名单/限流/审计 |
+| 任务编排 | 自研 SQLite 队列（~400 行租约/心跳/检查点） | **Temporal 工作流**——崩溃恢复/重试/取消平台原生（实测：SIGKILL 后 Activity 恰好执行一次） |
+| Agent 框架 | toolloop（自建） | **SwarmFlow**（OpenJiuwen，任务书指定框架）——适配器集成验证 6/6，toolloop 保留为回退 |
+| 元数据 | YAML + 状态库 | YAML（Agent 事实源）+ **OpenMetadata**（企业元数据中心：术语/血缘/表结构/enrichment） |
+| 身份传播 | ToolContext 进程内注入 | **MCP 请求头**（X-T2D-*）→ 服务端对照 DB 验证 → ToolContext——模型无法伪造（跨协议边界存活） |
 
 **关键设计决策**（详见 [docs/architecture.md](docs/architecture.md)）：
 
 1. **确定性编排 + 模型决策点**——runner 控制状态机/检查点/取消，模型只做意图解析、SQL 生成、组件设计。子 Agent 返回结构化结果，不靠聊天转述
 2. **口径规则结构化**——评测抓到模型两次"不守规矩"（汇率回退、维度中英映射），修法都是把规则做进视图/语义层，而不是加提示词
 3. **诚实性机制**——演示模式黄条、未接入的能力如实 409、空结果如实说明、用户前提错误时用数据纠正、贡献分析明确"非因果"、无伪造记录
+4. **治理随协议走**（2.0 新增）——MCP Server 内置查询网关全部治理，第三方 MCP 客户端也受同样约束
+5. **演进不重写**——每层双轨可切换（tools: inline|mcp、queue: sqlite|temporal、runtime: toolloop|swarmflow），评测门禁守每一步
 
 ## 📁 目录结构
 
