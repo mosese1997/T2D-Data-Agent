@@ -1,5 +1,5 @@
 agent:
-  runtime: swarmflow
+  runtime: toolloop
   # E1 双轨：inline = 进程内工具（1.0 默认）；mcp = 经 MCP server（治理在协议层）
   tools: mcp
   # E3 双轨：sqlite = 自研队列（1.0 默认）；temporal = Temporal 工作流
