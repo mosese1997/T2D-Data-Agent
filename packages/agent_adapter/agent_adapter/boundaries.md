@@ -24,7 +24,7 @@
 | **系统 Python 共存** | ✅ | ✅ **2.0 实测**：workswarm + mcp 2.x + temporalio + fastapi + openjiuwen 全部共存（依赖冲突已解决） |
 | **集成测试** | ✅ Journey 50/50 + 评测 37/38 | ✅ **2.0 实测**：适配器 6/6 + 冒烟 4/4 + 全量评测（进行中） |
 
-**决策（2.0）**：SwarmFlow 已转正为默认 runtime（2026-11-10）。toolloop 保留为配置可切回的回退。
+**决策（2.0）**：SwarmFlow 适配器已实现并通过独立集成测试（6/6），但**全管线集成存在结果格式不匹配**——SwarmFlow 工作流返回的 structured output 格式与 runner phase 方法期望的格式不一致（全量评测发现：工作流完成但任务状态不更新）。**toolloop 保持为默认 runtime**，SwarmFlow 作为可切换选项待修复后转正。
 
 ### 数据访问（E1 MCP 化）
 
