@@ -1,71 +1,88 @@
-# t2d 交付清单（任务书 §19 对照）
+# t2d 交付清单（2.0 架构）
 
-> 交付日期：2026-10-30｜版本：首版（演示模式）｜仓库：/root/rappi_t2d（git，main 分支）
+> 交付日期：2026-11-10 ｜ 版本：2.0 ｜ 仓库：/root/rappi_t2d（git，main 分支）
+> 1.0 交付见 git 历史（tag: v1.0）；2.0 演进计划见 docs/evolution-plan.md
 
 ## 一、可运行源码与锁定依赖 ✅
 
-- 单仓库 12 个包/服务（apps/web、services/{api,worker}、packages/{db,agent_adapter,semantic,query_gateway,dashboard_schema,cloud_adapters}、infra、config、scripts、tests、evals、docs）。
-- Python 依赖锁定（pyproject 精确版本区间）；前端锁定（react 18.3.1 / vite 5.4.11 / echarts 5.5.1 / ts 5.6.3 等，无 latest）。
-- 6 个阶段实施记录：docs/phase-notes/（每阶段验收数字与遗留项）。
+- 单仓库 14 个包/服务（新增 services/dws-mcp-server、temporal_workflows/worker、om_lineage/enrich）
+- Python 依赖锁定（pyproject 精确版本区间）；前端锁定（react 18.3.1 / vite 5.4.11 / echarts 5.5.1 / ts 5.6.3）
+- workswarm + mcp 2.x + temporalio + fastapi + openjiuwen 系统Python 共存（依赖冲突已解决并记录）
 
 ## 二、容器镜像构建与部署配置 ✅
 
-- services/{api,worker}/Dockerfile（多阶段 slim）；infra/sandbox/Dockerfile（OpenSandbox server）；infra/nginx/Dockerfile + nginx.conf（SSE 专用 location，proxy_buffering off）。
-- infra/compose/docker-compose.yml：business-pg / api / worker / sandbox-server / nginx 全栈，端口约定与健康检查。
-- 开发态：scripts/dev_up.sh（API:8001 / Worker:8002 / 沙箱:8003 / Vite:5173）。
+- services/{api,worker,dws-mcp-server}/Dockerfile（多阶段 slim）
+- infra/sandbox/Dockerfile（OpenSandbox server）
+- infra/nginx/Dockerfile + nginx.conf（SSE 专用 location，动态 DNS 解析，三入口 80/8080/8443）
+- infra/compose/docker-compose.yml：9 服务（business-pg / api / worker / sandbox-server / nginx / temporal / openmetadata-mysql / openmetadata-es / openmetadata-server）
+- worker docker-entrypoint.sh：按 queue 模式自动启动 SQLite 队列 worker 或 Temporal worker
+- api docker-entrypoint.sh：首次启动自动迁移+种子
 
 ## 三、云资源实际清单及规格
 
-- **当前**：无（演示模式——本地 Postgres 模拟 DWS、本地混合检索模拟 CSS、本地卷模拟 OBS；界面黄条显著标识）。
-- **待提供凭据**（docs/deployment.md §三接入清单）：DWS（连接/独立 Schema/受限只读账号/网络放行）、CSS（地址/认证/向量引擎确认/Embedding 来源+维度）、OBS（AK/SK/私有桶/region）、RDS MySQL 8.0（连接/账号）。
-- 适配器双实现就绪：cloud_adapters 真实实现占位含接入核对清单；凭据到位 → 改 .env + 实测验证后切换（代码零改动）。
+- **当前**：无（演示模式——本地适配器，界面黄条显著标识）
+- **待提供凭据**：DWS / CSS / OBS / RDS MySQL 8.0（清单见 deployment.md §三）
+- 适配器双实现就绪：凭据到位 → 改 .env → 实测验证 → 切换（代码零改动）
 
 ## 四、数据、语义、Agent 配置初始化脚本 ✅
 
-- scripts/gen_synthetic_data.py（seed=42 + anchor-date 完全可复现；30 万订单/72 万明细/116 万履约事件/含 2 个刻意缺失汇率日）。
-- scripts/import_synthetic_data.py（psycopg3 流式 COPY，--recreate 可重灌）；schema_business.sql（10 表+索引+v_orders_fx 汇率回退视图）。
-- scripts/seed_demo_users.py（6 账号/2 空间/角色矩阵/数据集授权白名单）、seed_semantics.py（YAML→状态库）、seed_preset_dashboards.py（3 预置看板，Source 经网关真实执行）。
-- config/semantics（13 指标/11 术语/10 关联规则/11 数据集，semantic_version=2）+ config/agent/agent_config.yaml（runtime 唯一切换开关）。
+- scripts/gen_synthetic_data.py（seed=42 可复现；币种定价按汇率放大）
+- scripts/import_synthetic_data.py（psycopg3 流式 COPY）
+- scripts/seed_demo_users.py / seed_semantics.py / seed_preset_dashboards.py
+- **scripts/sync_semantics_to_om.py**（2.0 新增：语义层→OM Glossary 同步，24 术语）
+- **scripts/ingest_tables_to_om.py**（2.0 新增：业务表→OM 摄取，10 表）
+- config/semantics（13 指标/11 术语/10 关联规则/11 数据集，semantic_version=2）
+- config/agent/agent_config.yaml（runtime/tools/queue 三开关）
 
 ## 五、评测集及结果 ✅
 
-- evals/cases：39 固定用例（27 NL + 12 scripted），覆盖任务书 §18 全部类别。
-- evals/runner.py + judge.py：**比较结果值不比较 SQL**；结果落 eval_runs 表 + evals/reports/*.json；管理台评测页可视化。
-- 最终结果：见 docs/phase-notes/2026-10-30-phase5.md「最终评测结果」（基础问数门禁 ≥90%）。
+| 路径 | 评测 | 基础问数 |
+|---|---|---|
+| 1.0（inline + sqlite） | 38/38 | 10/10 (100%) |
+| E1（MCP 工具 + sqlite） | 37/38 | 9/10 (90%) |
+| E3（MCP + temporal） | 冒烟 4/4 | 1/1 |
+| E4（SwarmFlow + MCP） | 冒烟 4/4 + 全量（进行中） | 1/1 |
+
+- 评测方法论：判定器比较**结果值**（与独立 reference SQL 对账），从不比较 SQL 字符串
+- 50 步用户旅程回归（E1 MCP 路径 50/50）
 
 ## 六、文档 ✅
 
-- docs/deployment.md（拓扑/首次部署/云接入清单/备份恢复/故障处置 runbook/三套演示彩排脚本）
-- docs/architecture.md（总览/建板全路径/安全模型/诚实性边界）
-- docs/requirements.md（任务书摘要）
-- packages/agent_adapter/agent_adapter/boundaries.md（运行时+沙箱能力矩阵/已知限制/事件映射/回退触发条件）
-- 各阶段 phase-notes（验收数字、过程发现的问题与修复、遗留项）
+- docs/architecture.md（1.0 架构详解）
+- docs/deployment.md（部署拓扑/云接入/备份/故障处置/演示彩排）
+- docs/evolution-plan.md（2.0 演进计划与进度）
+- docs/requirements.md（需求摘要）
+- docs/delivery.md（本文档）
+- docs/phase-notes/（1.0 六阶段 + E0 四项探测报告）
+- packages/agent_adapter/agent_adapter/boundaries.md（2.0 能力矩阵/已知限制/事件映射/回退条件）
 
 ## 七、已知限制与未实现项（诚实声明）
 
-1. ~~swarmflow 适配器未接入~~ ✅ **已实现并集成验证**（真实引擎 6/6：工具注入/结果捕获/事件映射/token 统计；运行时可切换）。边界：worker 环境需可 import openjiuwen——系统 Python/镜像默认不装（google-adk 传递依赖与 FastAPI 栈有冲突风险），不可用时管理台切换如实 409、worker 回退 toolloop。
-2. **云服务未接**：DWS/CSS/OBS/RDS 凭据未提供，全部走演示适配器；Embedding 用词法+字符 n-gram 混合检索（无 ML 模型，边界已记录）。
-3. ~~镜像内未打包迁移/种子~~ ✅ 已改为 entrypoint 自初始化（全新卷一条命令到完整环境，实测通过）。
-4. **HTTP 无 TLS**：演示环境明文（任务书边界）；会话 Cookie 未设 Secure（不能误设，§6）。
-5. ~~结果缓存未实现~~ ✅ 已实现权限域缓存（键含 user/workspace/role/数据集授权/file_ref 版本/分页参数——刷新换文件即换键，天然防陈旧；6 个隔离单测 + 实测命中 12 倍加速）。
-6. ~~刷新调度未自动触发~~ ✅ 已实现（worker 轮询 + croniter + 幂等键，实测每分钟计划自动触发并推进 next_run）。
-7. **多轮有状态会话**（agent_session）：SwarmFlow 侧源码验证未实测；toolloop 主链路用会话尾部消息实现多轮上下文，已验收。
-8. 沙箱为容器隔离，**非虚拟机级隔离**（任务书 §15 要求如实表述）。
+1. **云服务未接**：DWS/CSS/OBS/RDS 凭据未提供，走演示适配器
+2. **SwarmFlow**：已转正默认 runtime，但 workswarm 0.2.x 是早期版本，API 可能变动（boundaries.md 记录）
+3. **HTTP 无 TLS**：演示环境明文（任务书边界）
+4. **沙箱**：容器级隔离，非虚拟机级；禁网是 opt-in（适配层强制传 deny）
+5. **OM Wiki 页对接**：前端改动待完成（OM API 已就绪）
+6. **Temporal 生产形态**：当前用 dev server（内存库）；生产需 auto-setup + PG
+7. **评测 runner Temporal 模式**：eval runner 已支持 temporal queue，但全量评测尚未在 temporal 路径完成
 
-## 八、三套可复现演示脚本 ✅
+## 八、三套可复现演示脚本
 
-见 docs/deployment.md §六（①订单/GMV 对话建板修改发布 ②履约多 Source 看板局部修改 ③下降贡献分析+沙箱报告+Trace）。
+1. **订单/GMV 对话建板**："最近7天各国家GMV趋势，做成看板" → Agent 查询→设计→预览→Apply→发布
+2. **履约多 Source 看板**：预置"履约监控"看板 → 局部修改 → 刷新
+3. **下降贡献分析**："分析上周相比上上周GMV变化，各国家贡献" → 沙箱分解 → 非因果结论 → Trace 查看
 
-## 九、验收数字汇总
+## 九、2.0 新增交付物
 
-| 阶段 | 验收 | 结果 |
+| 组件 | 位置 | 说明 |
 |---|---|---|
-| 1 技术验证与契约 | verify_phase1 | 18/19（唯一未过为可选 MySQL 加测，已单独验证通过） |
-| 2 底座与数据 | verify_phase2 | 17/17 |
-| 3 端到端建板 | verify_phase3 | 12/12（含 SIGKILL 崩溃恢复不重复应用） |
-| 4 修改/分享/发布 | verify_phase4 | 20/20 |
-| 5 分析与平台 | verify_phase5 | 17/17（分析→Trace 全链路、非因果表述、诚实 409） |
-| 6 云部署 | verify_phase6 --full | 19/19（compose 构建 + :8080 + SSE 经 Nginx + 真实建板彩排） |
-| 评测套件 | evals full（38 用例） | **38/38 全绿**（基础问数 10/10=100%，门禁 90%）；报告 evals/reports/ |
-
-**Agent 能力清单**（用户可对话使用）：数据问答（answer，直答不建板）｜建板/改板（build/simple_modify，候选变更+原子应用+冲突检测）｜对比分析（analysis，沙箱贡献分解，非因果表述）｜澄清（歧义时主动提问）｜多轮上下文｜发布审批｜分享｜刷新。
+| **MCP Server** | services/dws-mcp-server/ | 数据访问协议化（治理内置，D1 身份传播） |
+| **MCP 客户端** | packages/agent_adapter/mcp_client.py | 远程工具包装为本地 Tool 对象 |
+| **Temporal 工作流** | services/worker/temporal_workflows.py | runner 状态机→Workflow/Activities |
+| **Temporal Worker** | services/worker/temporal_worker.py | 替代 SQLite 队列轮询 |
+| **OM 血缘** | packages/cloud_adapters/om_lineage.py | execute_query→source→tables |
+| **OM Enrichment** | packages/cloud_adapters/om_enrich.py | 列描述/标签/owner→get_authorized_schema |
+| **OM 同步脚本** | scripts/sync_semantics_to_om.py | YAML→Glossary（幂等） |
+| **OM 摄取脚本** | scripts/ingest_tables_to_om.py | 业务表→OM（列结构） |
+| **Runner Phase 提取** | services/worker/runner.py | 5 个独立方法（inline 和 Temporal 共用） |
+| **双模式 Worker 入口** | services/worker/docker-entrypoint.sh | 按 queue 模式自动启动 |
